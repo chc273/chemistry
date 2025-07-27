@@ -1,0 +1,118 @@
+version: '3.8'
+
+services:
+  # Core services
+  quantum-core:
+    build:
+      context: .
+      dockerfile: docker/base.Dockerfile
+      target: dev
+    volumes:
+      - .:/app
+      - /app/.venv
+    working_dir: /app
+    command: python -c "import quantum.core; print('Quantum Core loaded successfully')"
+
+  # Quantum Chemistry service
+  quantum-chemistry:
+    build:
+      context: .
+      dockerfile: docker/quantum-chemistry.Dockerfile
+    volumes:
+      - .:/app
+      - /app/.venv
+    depends_on:
+      - quantum-core
+    environment:
+      - PYTHONPATH=/app/packages/quantum-core/src:/app/packages/quantum-chemistry/src
+    ports:
+      - "8001:8000"
+
+  # Materials Science service  
+  quantum-materials:
+    build:
+      context: .
+      dockerfile: docker/base.Dockerfile
+      target: dev
+    volumes:
+      - .:/app
+      - /app/.venv
+    depends_on:
+      - quantum-core
+    environment:
+      - PYTHONPATH=/app/packages/quantum-core/src:/app/packages/quantum-materials/src
+    ports:
+      - "8002:8000"
+
+  # Quantum Computing service
+  quantum-computing:
+    build:
+      context: .
+      dockerfile: docker/base.Dockerfile
+      target: dev
+    volumes:
+      - .:/app
+      - /app/.venv
+    depends_on:
+      - quantum-core
+    environment:
+      - PYTHONPATH=/app/packages/quantum-core/src:/app/packages/quantum-computing/src
+    ports:
+      - "8003:8000"
+
+  # Machine Learning service
+  quantum-ml:
+    build:
+      context: .
+      dockerfile: docker/quantum-ml.Dockerfile
+    volumes:
+      - .:/app
+      - /app/.venv
+    depends_on:
+      - quantum-core
+    environment:
+      - PYTHONPATH=/app/packages/quantum-core/src:/app/packages/quantum-ml/src
+    ports:
+      - "8004:8000"
+
+  # CLI service
+  quantum-cli:
+    build:
+      context: .
+      dockerfile: docker/base.Dockerfile
+      target: dev
+    volumes:
+      - .:/app
+      - /app/.venv
+    depends_on:
+      - quantum-core
+      - quantum-chemistry
+      - quantum-materials
+      - quantum-computing
+      - quantum-ml
+    environment:
+      - PYTHONPATH=/app/packages/quantum-core/src:/app/packages/quantum-cli/src
+    ports:
+      - "8000:8000"
+    command: python -m quantum.cli --help
+
+  # Development environment
+  dev:
+    build:
+      context: .
+      dockerfile: docker/base.Dockerfile
+      target: dev
+    volumes:
+      - .:/app
+      - /app/.venv
+    working_dir: /app
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+    environment:
+      - PYTHONPATH=/app/packages/quantum-core/src
+
+# Shared volumes
+volumes:
+  quantum_cache:
+    driver: local

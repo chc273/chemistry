@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quantum-chemistry"
+version = "0.1.0"
+description = "Quantum chemistry calculation methods with PySCF and QCEngine integration"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Chemistry Team", email = "team@quantum.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "quantum-core==0.1.0",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "pyscf>=2.3.0",
+    "qcengine>=0.28.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.0.285",
+    "mypy>=1.5.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quantum"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"

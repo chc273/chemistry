@@ -1,0 +1,74 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quantum-cli"
+version = "0.1.0"
+description = "Command-line interface for quantum chemistry calculations"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Chemistry Team", email = "team@quantum.com" }
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "quantum-core==0.1.0",
+    "quantum-chemistry==0.1.0",
+    "quantum-materials==0.1.0",
+    "quantum-ml==0.1.0",
+    "quantum-computing==0.1.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+    "typer>=0.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.0.285",
+    "mypy>=1.5.0",
+]
+
+[project.scripts]
+quantum = "quantum.cli.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quantum"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long, handled by formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*" = ["ARG", "S"]
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["quantum.cli"]
