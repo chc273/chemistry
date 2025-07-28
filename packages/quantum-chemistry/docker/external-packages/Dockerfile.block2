@@ -1,0 +1,91 @@
+# Block2 DMRG Package Docker Build
+# Multi-stage build for optimized production image
+
+# Build stage
+FROM ubuntu:24.04 as block2-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    python3-dev \
+    python3-pip \
+    libmkl-dev \
+    libmkl-rt \
+    libblas-dev \
+    liblapack-dev \
+    libopenmpi-dev \
+    openmpi-bin \
+    libboost-all-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip3 install pybind11>=2.12 numpy
+
+# Clone and build block2
+WORKDIR /opt
+RUN git clone https://github.com/block-hczhai/block2-preview.git block2
+
+WORKDIR /opt/block2
+RUN mkdir build
+
+WORKDIR /opt/block2/build
+
+# Configure with optimized settings
+RUN cmake .. \
+    -DUSE_MKL=ON \
+    -DBUILD_LIB=ON \
+    -DLARGE_BOND=ON \
+    -DMPI=ON \
+    -DUSE_COMPLEX=ON \
+    -DUSE_SG=ON \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_CXX_FLAGS="-O3 -march=native"
+
+# Build with all available cores
+RUN make -j$(nproc)
+
+# Add Python path setup
+RUN echo "export PYTHONPATH=/opt/block2/build:/opt/block2:\$PYTHONPATH" > /opt/block2/setup_env.sh
+
+# Production stage
+FROM ubuntu:24.04 as block2-production
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    libmkl-rt \
+    libblas3 \
+    liblapack3 \
+    libopenmpi3 \
+    openmpi-bin \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python runtime dependencies
+RUN pip3 install numpy scipy
+
+# Copy built block2 from builder stage
+COPY --from=block2-builder /opt/block2 /opt/block2
+
+# Set up environment
+ENV PYTHONPATH=/opt/block2/build:/opt/block2:$PYTHONPATH
+ENV PATH=/opt/block2/build:$PATH
+
+# Create a test script
+RUN echo '#!/bin/bash\n\
+echo "Testing block2 installation..."\n\
+python3 -c "import block2; print(\"Block2 version:\", getattr(block2, \"__version__\", \"development\"))"\n\
+echo "Block2 installation test completed successfully!"' > /opt/test_block2.sh \
+    && chmod +x /opt/test_block2.sh
+
+WORKDIR /opt/block2
+
+# Set default command to test installation
+CMD ["/opt/test_block2.sh"]

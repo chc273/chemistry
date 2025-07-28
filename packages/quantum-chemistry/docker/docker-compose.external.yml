@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  # Scientific computing base image
+  scientific-base:
+    build:
+      context: .
+      dockerfile: base/Dockerfile.scientific-base
+    image: quantum-chemistry/scientific-base:latest
+    container_name: qc-scientific-base
+
+  # Block2 DMRG package
+  block2:
+    build:
+      context: .
+      dockerfile: external-packages/Dockerfile.block2
+      target: block2-production
+    image: quantum-chemistry/block2:latest
+    container_name: qc-block2
+    depends_on:
+      - scientific-base
+    volumes:
+      - block2-data:/opt/block2/data
+    environment:
+      - PYTHONPATH=/opt/block2/build:/opt/block2
+      - OMP_NUM_THREADS=4
+
+  # OpenMolcas CASPT2 package
+  openmolcas:
+    build:
+      context: .
+      dockerfile: external-packages/Dockerfile.openmolcas
+      target: molcas-production
+    image: quantum-chemistry/openmolcas:latest
+    container_name: qc-openmolcas
+    depends_on:
+      - scientific-base
+    volumes:
+      - molcas-data:/opt/molcas/data
+    environment:
+      - MOLCAS=/opt/molcas
+      - MOLCAS_MEM=2000
+      - OMP_NUM_THREADS=4
+
+  # Dice SHCI package
+  dice:
+    build:
+      context: .
+      dockerfile: external-packages/Dockerfile.dice
+      target: dice-production
+    image: quantum-chemistry/dice:latest
+    container_name: qc-dice
+    depends_on:
+      - scientific-base
+    volumes:
+      - dice-data:/opt/dice/data
+    environment:
+      - DICE_ROOT=/opt/dice
+      - OMP_NUM_THREADS=4
+
+  # Quantum Package CIPSI
+  quantum-package:
+    build:
+      context: .
+      dockerfile: external-packages/Dockerfile.quantum-package
+      target: qp2-production
+    image: quantum-chemistry/quantum-package:latest
+    container_name: qc-quantum-package
+    depends_on:
+      - scientific-base
+    volumes:
+      - qp2-data:/opt/quantum-package/data
+    environment:
+      - QP_ROOT=/opt/quantum-package
+      - OMP_NUM_THREADS=4
+
+  # Combined production environment
+  quantum-chemistry-full:
+    build:
+      context: .
+      dockerfile: Dockerfile.combined
+    image: quantum-chemistry/full:latest
+    container_name: qc-full
+    depends_on:
+      - block2
+      - openmolcas
+      - dice
+      - quantum-package
+    volumes:
+      - qc-data:/opt/data
+      - qc-results:/opt/results
+    environment:
+      - PYTHONPATH=/opt/block2/build:/opt/block2:/opt/quantum-chemistry
+      - MOLCAS=/opt/molcas
+      - MOLCAS_MEM=2000
+      - DICE_ROOT=/opt/dice
+      - QP_ROOT=/opt/quantum-package
+      - OMP_NUM_THREADS=4
+    ports:
+      - "8888:8888"  # Jupyter notebook
+    command: /bin/bash
+
+  # Development environment with all packages
+  quantum-chemistry-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.combined
+      target: development
+    image: quantum-chemistry/dev:latest
+    container_name: qc-dev
+    volumes:
+      - ../:/opt/quantum-chemistry  # Mount source code
+      - qc-dev-data:/opt/data
+    environment:
+      - PYTHONPATH=/opt/block2/build:/opt/block2:/opt/quantum-chemistry
+      - MOLCAS=/opt/molcas
+      - DICE_ROOT=/opt/dice  
+      - QP_ROOT=/opt/quantum-package
+      - OMP_NUM_THREADS=4
+    ports:
+      - "8889:8888"  # Jupyter notebook for development
+    working_dir: /opt/quantum-chemistry
+    command: /bin/bash
+
+volumes:
+  block2-data:
+  molcas-data:
+  dice-data:
+  qp2-data:
+  qc-data:
+  qc-results:
+  qc-dev-data:
+
+networks:
+  default:
+    name: quantum-chemistry-network

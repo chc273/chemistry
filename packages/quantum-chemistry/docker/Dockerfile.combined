@@ -1,0 +1,177 @@
+# Combined Quantum Chemistry Docker Image
+# Brings together all external methods in a unified container
+
+# Start from scientific base
+FROM ubuntu:24.04 as base-stage
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install all runtime dependencies
+RUN apt-get update && apt-get install -y \
+    # System essentials
+    build-essential \
+    python3 \
+    python3-dev \
+    python3-pip \
+    python3-venv \
+    git \
+    wget \
+    curl \
+    # Scientific computing libraries
+    libmkl-rt \
+    libblas3 \
+    liblapack3 \
+    libopenblas-base \
+    libfftw3-dev \
+    # MPI and parallel computing
+    libopenmpi3 \
+    openmpi-bin \
+    # Fortran support for OpenMolcas
+    gfortran \
+    # Boost libraries for Dice
+    libboost-serialization1.83.0 \
+    libboost-mpi1.83.0 \
+    # OCaml for Quantum Package
+    ocaml \
+    # System libraries
+    libncurses5 \
+    libgmp10 \
+    zlib1g \
+    rsync \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages
+RUN pip3 install --no-cache-dir \
+    numpy \
+    scipy \
+    matplotlib \
+    jupyter \
+    ipython \
+    pytest \
+    pybind11 \
+    h5py \
+    f90nml \
+    ipie
+
+# Copy external packages from individual build stages
+COPY --from=quantum-chemistry/block2:latest /opt/block2 /opt/block2
+COPY --from=quantum-chemistry/openmolcas:latest /opt/molcas /opt/molcas
+COPY --from=quantum-chemistry/dice:latest /opt/dice /opt/dice
+COPY --from=quantum-chemistry/quantum-package:latest /opt/quantum-package /opt/quantum-package
+COPY --from=quantum-chemistry/quantum-package:latest /usr/local/bin/ninja /usr/local/bin/
+COPY --from=quantum-chemistry/quantum-package:latest /usr/local/bin/irpf90 /usr/local/bin/
+
+# Development stage
+FROM base-stage as development
+
+# Install additional development tools
+RUN pip3 install --no-cache-dir \
+    black \
+    ruff \
+    mypy \
+    pre-commit \
+    uv
+
+# Create development directories
+RUN mkdir -p /opt/quantum-chemistry /opt/data /opt/results
+
+# Set up comprehensive environment
+ENV PYTHONPATH=/opt/block2/build:/opt/block2:/opt/quantum-chemistry:$PYTHONPATH
+ENV MOLCAS=/opt/molcas
+ENV MOLCAS_MEM=2000
+ENV DICE_ROOT=/opt/dice
+ENV QP_ROOT=/opt/quantum-package
+ENV PATH=/opt/molcas/bin:/opt/dice:/opt/quantum-package/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/molcas/lib:$LD_LIBRARY_PATH
+
+# Create environment setup script
+RUN echo '#!/bin/bash\n\
+# Quantum Chemistry External Methods Environment Setup\n\
+export PYTHONPATH=/opt/block2/build:/opt/block2:/opt/quantum-chemistry:$PYTHONPATH\n\
+export MOLCAS=/opt/molcas\n\
+export MOLCAS_MEM=2000\n\
+export DICE_ROOT=/opt/dice\n\
+export QP_ROOT=/opt/quantum-package\n\
+export PATH=/opt/molcas/bin:/opt/dice:/opt/quantum-package/bin:$PATH\n\
+export LD_LIBRARY_PATH=/opt/molcas/lib:$LD_LIBRARY_PATH\n\
+\n\
+# Source Quantum Package environment\n\
+if [ -f "$QP_ROOT/quantum_package.rc" ]; then\n\
+    source $QP_ROOT/quantum_package.rc\n\
+fi\n\
+\n\
+echo "Quantum Chemistry external methods environment loaded successfully!"\n\
+echo "Available methods:"\n\
+echo "  - Block2 DMRG: /opt/block2"\n\
+echo "  - OpenMolcas CASPT2: /opt/molcas"\n\
+echo "  - Dice SHCI: /opt/dice"\n\
+echo "  - Quantum Package CIPSI: /opt/quantum-package"\n\
+echo "  - ipie AF-QMC: $(python3 -c \"import ipie; print(ipie.__file__)\" 2>/dev/null || echo \"Not available\")"' \
+    > /opt/setup_environment.sh && chmod +x /opt/setup_environment.sh
+
+WORKDIR /opt/quantum-chemistry
+
+# Production stage
+FROM base-stage as production
+
+# Set up environment for production
+ENV PYTHONPATH=/opt/block2/build:/opt/block2:$PYTHONPATH
+ENV MOLCAS=/opt/molcas
+ENV MOLCAS_MEM=2000
+ENV DICE_ROOT=/opt/dice
+ENV QP_ROOT=/opt/quantum-package
+ENV PATH=/opt/molcas/bin:/opt/dice:/opt/quantum-package/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/molcas/lib:$LD_LIBRARY_PATH
+
+# Copy the quantum chemistry package (this would be the built package)
+COPY . /opt/quantum-chemistry
+
+# Create comprehensive test script
+RUN echo '#!/bin/bash\n\
+echo "Testing all external quantum chemistry methods..."\n\
+echo ""\n\
+\n\
+# Test Block2\n\
+echo "=== Testing Block2 DMRG ==="\n\
+python3 -c "import block2; print(\"Block2 imported successfully\")" || echo "Block2 import failed"\n\
+echo ""\n\
+\n\
+# Test OpenMolcas\n\
+echo "=== Testing OpenMolcas ==="\n\
+if command -v pymolcas >/dev/null 2>&1; then\n\
+    echo "OpenMolcas pymolcas found"\n\
+else\n\
+    echo "OpenMolcas pymolcas not found in PATH"\n\
+fi\n\
+echo ""\n\
+\n\
+# Test Dice\n\
+echo "=== Testing Dice SHCI ==="\n\
+if [ -f "/opt/dice/Dice" ]; then\n\
+    echo "Dice executable found"\n\
+else\n\
+    echo "Dice executable not found"\n\
+fi\n\
+echo ""\n\
+\n\
+# Test Quantum Package\n\
+echo "=== Testing Quantum Package CIPSI ==="\n\
+if command -v qp_run >/dev/null 2>&1; then\n\
+    echo "Quantum Package qp_run found"\n\
+else\n\
+    echo "Quantum Package qp_run not found in PATH"\n\
+fi\n\
+echo ""\n\
+\n\
+# Test ipie\n\
+echo "=== Testing ipie AF-QMC ==="\n\
+python3 -c "import ipie; print(\"ipie version:\", getattr(ipie, \"__version__\", \"unknown\"))" || echo "ipie import failed"\n\
+echo ""\n\
+\n\
+echo "External methods testing completed!"' \
+    > /opt/test_all_methods.sh && chmod +x /opt/test_all_methods.sh
+
+WORKDIR /opt/quantum-chemistry
+
+# Default command
+CMD ["/opt/test_all_methods.sh"]

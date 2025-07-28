@@ -1,0 +1,110 @@
+# OpenMolcas CASPT2 Package Docker Build
+# Multi-stage build for optimized production image
+
+# Build stage
+FROM ubuntu:24.04 as molcas-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    make \
+    git \
+    gfortran \
+    python3-dev \
+    python3-pip \
+    liblapack-dev \
+    libblas-dev \
+    libmkl-dev \
+    libopenmpi-dev \
+    openmpi-bin \
+    pkg-config \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip3 install numpy scipy h5py
+
+# Clone OpenMolcas
+WORKDIR /opt
+RUN git clone https://gitlab.com/Molcas/OpenMolcas.git molcas
+
+WORKDIR /opt/molcas
+
+# Initialize LAPACK submodule if needed
+RUN git submodule update --init External/lapack
+
+# Create build directory
+RUN mkdir -p build
+
+WORKDIR /opt/molcas/build
+
+# Configure with CMake
+RUN cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/opt/molcas/install \
+    -DCMAKE_Fortran_FLAGS="-O3 -march=native" \
+    -DCMAKE_C_FLAGS="-O3 -march=native" \
+    -DCMAKE_CXX_FLAGS="-O3 -march=native"
+
+# Build with parallel compilation
+RUN make -j$(nproc) install
+
+# Create environment setup script
+RUN echo '#!/bin/bash\n\
+export MOLCAS=/opt/molcas/install\n\
+export MOLCAS_MEM=1000\n\
+export PATH=$MOLCAS/bin:$PATH\n\
+export LD_LIBRARY_PATH=$MOLCAS/lib:$LD_LIBRARY_PATH' > /opt/molcas/setup_env.sh \
+    && chmod +x /opt/molcas/setup_env.sh
+
+# Production stage
+FROM ubuntu:24.04 as molcas-production
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    gfortran \
+    liblapack3 \
+    libblas3 \
+    libmkl-rt \
+    libopenmpi3 \
+    openmpi-bin \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python runtime dependencies
+RUN pip3 install numpy scipy h5py
+
+# Copy built OpenMolcas from builder stage
+COPY --from=molcas-builder /opt/molcas/install /opt/molcas
+COPY --from=molcas-builder /opt/molcas/setup_env.sh /opt/setup_molcas.sh
+
+# Set up environment
+ENV MOLCAS=/opt/molcas
+ENV MOLCAS_MEM=1000
+ENV PATH=/opt/molcas/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/molcas/lib:$LD_LIBRARY_PATH
+
+# Create a test script
+RUN echo '#!/bin/bash\n\
+echo "Testing OpenMolcas installation..."\n\
+source /opt/setup_molcas.sh\n\
+if command -v pymolcas >/dev/null 2>&1; then\n\
+    echo "OpenMolcas pymolcas executable found"\n\
+    pymolcas --version 2>/dev/null || echo "PyMolcas version check completed"\n\
+else\n\
+    echo "Warning: pymolcas executable not found in PATH"\n\
+    ls -la /opt/molcas/bin/\n\
+fi\n\
+echo "OpenMolcas installation test completed!"' > /opt/test_molcas.sh \
+    && chmod +x /opt/test_molcas.sh
+
+WORKDIR /opt/molcas
+
+# Set default command to test installation
+CMD ["/opt/test_molcas.sh"]

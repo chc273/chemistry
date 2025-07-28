@@ -1,9 +1,37 @@
 """
-External software interfaces for multireference calculations.
+External multireference method integrations.
 
-This module provides unified interfaces to external quantum chemistry
-software packages for multireference calculations.
+This module provides interfaces to external quantum chemistry software
+for advanced multireference methods including:
+
+- DMRG (Density Matrix Renormalization Group) via block2
+- CASPT2/MS-CASPT2 via OpenMolcas
+- AF-QMC (Auxiliary Field Quantum Monte Carlo) via ipie/QMCPACK
+- Selected CI (SHCI/CIPSI) via Dice/Quantum Package
 """
 
-# Placeholder imports - will be implemented as needed
-__all__ = []
+from .base import (
+    ExternalMethodInterface,
+    ExternalMethodResult,
+    ExternalSoftwareError,
+    SoftwareNotFoundError,
+)
+
+from .dmrg import DMRGMethod
+from .openmolcas import CASPT2Method, OpenMolcasInterface
+from .afqmc import AFQMCMethod
+from .selected_ci import SelectedCIMethod, SHCIInterface, CIPSIInterface
+
+__all__ = [
+    "ExternalMethodInterface",
+    "ExternalMethodResult", 
+    "ExternalSoftwareError",
+    "SoftwareNotFoundError",
+    "DMRGMethod",
+    "CASPT2Method",
+    "OpenMolcasInterface",
+    "AFQMCMethod",
+    "SelectedCIMethod",
+    "SHCIInterface",
+    "CIPSIInterface",
+]

@@ -29,6 +29,21 @@ from .workflows import (
     MultireferenceWorkflow,
 )
 
+# External method integrations (optional imports)
+try:
+    from .external import (
+        DMRGMethod,
+        AFQMCMethod,
+        SelectedCIMethod,
+        ExternalMethodInterface,
+        ExternalSoftwareError,
+    )
+    _EXTERNAL_METHODS_AVAILABLE = True
+except ImportError as e:
+    # External methods require additional dependencies
+    _EXTERNAL_METHODS_AVAILABLE = False
+    _EXTERNAL_IMPORT_ERROR = str(e)
+
 __version__ = "0.1.0"
 
 __all__ = [
@@ -41,3 +56,13 @@ __all__ = [
     "CASPT2Method",
     "MultireferenceWorkflow",
 ]
+
+# Add external methods to __all__ if available
+if _EXTERNAL_METHODS_AVAILABLE:
+    __all__.extend([
+        "DMRGMethod",
+        "AFQMCMethod", 
+        "SelectedCIMethod",
+        "ExternalMethodInterface",
+        "ExternalSoftwareError",
+    ])

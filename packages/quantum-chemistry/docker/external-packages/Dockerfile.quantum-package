@@ -1,0 +1,121 @@
+# Quantum Package CIPSI Docker Build
+# Multi-stage build for optimized production image
+
+# Build stage
+FROM ubuntu:24.04 as qp2-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    make \
+    git \
+    curl \
+    wget \
+    python3-dev \
+    python3-pip \
+    # OCaml and related dependencies
+    ocaml \
+    opam \
+    # System libraries required by QP2
+    libncurses5-dev \
+    pkg-config \
+    libgmp3-dev \
+    m4 \
+    zlib1g-dev \
+    # Additional utilities
+    rsync \
+    patch \
+    unzip \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip3 install numpy f90nml
+
+# Set up OCaml environment
+ENV OPAMROOT=/opt/opam
+RUN opam init --disable-sandboxing -y
+RUN eval $(opam env) && opam install -y dune
+
+# Download and install Ninja build system
+RUN wget -O /tmp/ninja.zip https://github.com/ninja-build/ninja/releases/latest/download/ninja-linux.zip \
+    && unzip /tmp/ninja.zip -d /usr/local/bin \
+    && rm /tmp/ninja.zip
+
+# Download and install IRPF90
+RUN wget -O /tmp/irpf90.tar.gz https://github.com/scemama/irpf90/archive/refs/tags/v1.7.7.tar.gz \
+    && tar -xzf /tmp/irpf90.tar.gz -C /opt \
+    && cd /opt/irpf90-1.7.7 \
+    && make \
+    && cp bin/irpf90 /usr/local/bin/ \
+    && rm /tmp/irpf90.tar.gz
+
+# Clone Quantum Package
+WORKDIR /opt
+RUN git clone https://github.com/QuantumPackage/qp2.git quantum-package
+
+WORKDIR /opt/quantum-package
+
+# Configure Quantum Package
+RUN ./configure --install
+
+# Source the environment and build
+RUN bash -c "source quantum_package.rc && ninja"
+
+# Create environment setup script
+RUN echo '#!/bin/bash\n\
+export QP_ROOT=/opt/quantum-package\n\
+source $QP_ROOT/quantum_package.rc' > /opt/quantum-package/setup_env.sh \
+    && chmod +x /opt/quantum-package/setup_env.sh
+
+# Production stage
+FROM ubuntu:24.04 as qp2-production
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    ocaml \
+    libncurses5 \
+    libgmp10 \
+    zlib1g \
+    rsync \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python runtime dependencies
+RUN pip3 install numpy f90ntml
+
+# Copy built Quantum Package from builder stage
+COPY --from=qp2-builder /opt/quantum-package /opt/quantum-package
+COPY --from=qp2-builder /usr/local/bin/ninja /usr/local/bin/
+COPY --from=qp2-builder /usr/local/bin/irpf90 /usr/local/bin/
+
+# Set up environment
+ENV QP_ROOT=/opt/quantum-package
+ENV PATH=/opt/quantum-package/bin:$PATH
+
+# Create a test script
+RUN echo '#!/bin/bash\n\
+echo "Testing Quantum Package installation..."\n\
+source /opt/quantum-package/setup_env.sh\n\
+if command -v qp_run >/dev/null 2>&1; then\n\
+    echo "Quantum Package qp_run executable found"\n\
+    qp_run --help | head -5\n\
+    echo "Available QP modules:"\n\
+    ls $QP_ROOT/src/ | head -10\n\
+    echo "Quantum Package installation test completed successfully!"\n\
+else\n\
+    echo "Error: qp_run executable not found"\n\
+    ls -la /opt/quantum-package/bin/\n\
+    exit 1\n\
+fi' > /opt/test_qp2.sh \
+    && chmod +x /opt/test_qp2.sh
+
+WORKDIR /opt/quantum-package
+
+# Set default command to test installation
+CMD ["/opt/test_qp2.sh"]

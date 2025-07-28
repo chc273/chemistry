@@ -1,0 +1,113 @@
+# Dice SHCI Package Docker Build
+# Multi-stage build for optimized production image
+
+# Build stage
+FROM ubuntu:24.04 AS dice-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    make \
+    git \
+    python3-dev \
+    python3-pip \
+    libboost-all-dev \
+    libopenmpi-dev \
+    openmpi-bin \
+    mpich \
+    libmpich-dev \
+    libeigen3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip3 install --break-system-packages numpy scipy
+
+# Clone Dice repository
+WORKDIR /opt
+RUN git clone https://github.com/sanshar/Dice.git dice
+
+WORKDIR /opt/dice
+
+# Create a custom Makefile for containerized build
+RUN cat > Makefile << 'EOF'\
+CXX = mpicxx\
+CXXFLAGS = -std=c++11 -O3 -DNDEBUG -march=native\
+BOOST_INCLUDE = /usr/include/boost\
+EIGEN_INCLUDE = /usr/include/eigen3\
+MPI_INCLUDE = /usr/include/mpi\
+\
+INCLUDES = -I$(BOOST_INCLUDE) -I$(EIGEN_INCLUDE) -I$(MPI_INCLUDE) -I.\
+\
+SOURCES = $(wildcard *.cpp) $(wildcard */*.cpp)\
+OBJECTS = $(SOURCES:.cpp=.o)\
+TARGET = Dice\
+\
+all: $(TARGET)\
+\
+$(TARGET): $(OBJECTS)\
+	$(CXX) $(CXXFLAGS) -o $$@ $$^ -lboost_serialization -lboost_mpi\
+\
+%.o: %.cpp\
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $$< -o $$@\
+\
+clean:\
+	rm -f $(OBJECTS) $(TARGET)\
+\
+.PHONY: all clean\
+EOF
+
+# Build Dice
+RUN make -j$(nproc)
+
+# Create environment setup script
+RUN echo '#!/bin/bash\n\
+export DICE_ROOT=/opt/dice\n\
+export PATH=$DICE_ROOT:$PATH' > /opt/dice/setup_env.sh \
+    && chmod +x /opt/dice/setup_env.sh
+
+# Production stage
+FROM ubuntu:24.04 AS dice-production
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    libboost-serialization1.83.0 \
+    libboost-mpi1.83.0 \
+    libopenmpi3 \
+    openmpi-bin \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python runtime dependencies
+RUN pip3 install --break-system-packages numpy scipy
+
+# Copy built Dice from builder stage
+COPY --from=dice-builder /opt/dice/Dice /opt/dice/
+COPY --from=dice-builder /opt/dice/setup_env.sh /opt/setup_dice.sh
+
+# Set up environment
+ENV DICE_ROOT=/opt/dice
+ENV PATH=/opt/dice:$PATH
+
+# Create a test script
+RUN echo '#!/bin/bash\n\
+echo "Testing Dice installation..."\n\
+source /opt/setup_dice.sh\n\
+if [ -f "/opt/dice/Dice" ]; then\n\
+    echo "Dice executable found at /opt/dice/Dice"\n\
+    ls -la /opt/dice/Dice\n\
+    echo "Dice build test completed successfully!"\n\
+else\n\
+    echo "Error: Dice executable not found"\n\
+    exit 1\n\
+fi' > /opt/test_dice.sh \
+    && chmod +x /opt/test_dice.sh
+
+WORKDIR /opt/dice
+
+# Set default command to test installation
+CMD ["/opt/test_dice.sh"]
