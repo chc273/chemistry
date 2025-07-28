@@ -26,6 +26,19 @@ from .hartree_fock import (
     RestrictedOpenHF,
     UnrestrictedHF,
 )
+from .multireference import (
+    MultireferenceMethod,
+    MultireferenceResult,
+    MethodSelector,
+)
+from .multireference.methods import (
+    CASSCFMethod,
+    NEVPT2Method,
+    CASPT2Method,
+)
+from .multireference.workflows import (
+    MultireferenceWorkflow,
+)
 
 __version__ = "0.1.0"
 
@@ -53,4 +66,12 @@ __all__ = [
     "find_active_space_ibo",
     "find_active_space_natural_orbitals",
     "auto_find_active_space",
+    # Multireference methods
+    "MultireferenceMethod",
+    "MultireferenceResult",
+    "MethodSelector",
+    "CASSCFMethod",
+    "NEVPT2Method",
+    "CASPT2Method",
+    "MultireferenceWorkflow",
 ]

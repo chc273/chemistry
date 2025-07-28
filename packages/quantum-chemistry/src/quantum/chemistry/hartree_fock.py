@@ -171,7 +171,6 @@ class HartreeFockCalculator(BaseCalculator):
         if self._mf is None:
             raise RuntimeError("No calculation results available")
 
-
         # Calculate dipole moment
         dipole_ao = self._mol.intor("int1e_r")
         dm = self._mf.make_rdm1()

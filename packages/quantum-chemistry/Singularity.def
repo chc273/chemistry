@@ -1,0 +1,165 @@
+# Singularity definition file for HPC quantum chemistry package
+Bootstrap: docker
+From: continuumio/miniconda3:latest
+
+%help
+    Quantum Chemistry Package with Multireference Methods
+    
+    This container provides a complete environment for quantum chemistry
+    calculations with PySCF and multireference methods.
+    
+    Usage:
+        singularity exec quantum-chemistry.sif python your_script.py
+        singularity run quantum-chemistry.sif  # Interactive Python
+        singularity shell quantum-chemistry.sif  # Shell access
+    
+    Included software:
+        - PySCF 2.3+
+        - Quantum Chemistry Package with multireference methods
+        - NumPy, SciPy, and scientific computing stack
+        - Benchmarking and validation tools
+
+%labels
+    Author Quantum Chemistry Team
+    Version 1.0
+    Description Multireference quantum chemistry methods with PySCF
+
+%environment
+    export LC_ALL=C
+    export PYTHONPATH=/opt/quantum-chemistry/src:$PYTHONPATH
+    export PATH=/opt/conda/bin:$PATH
+    export OMP_NUM_THREADS=1
+    export MKL_NUM_THREADS=1
+    export OPENBLAS_NUM_THREADS=1
+    export NUMEXPR_NUM_THREADS=1
+
+%post
+    # Update system and install dependencies
+    apt-get update && apt-get install -y \
+        build-essential \
+        cmake \
+        gfortran \
+        libblas-dev \
+        liblapack-dev \
+        libhdf5-dev \
+        libopenmpi-dev \
+        openmpi-bin \
+        git \
+        curl \
+        wget \
+        && rm -rf /var/lib/apt/lists/*
+    
+    # Set conda environment
+    export PATH=/opt/conda/bin:$PATH
+    
+    # Create and activate conda environment
+    conda create -n quantum-chemistry python=3.11 -y
+    
+    # Activate environment and install packages
+    . /opt/conda/etc/profile.d/conda.sh
+    conda activate quantum-chemistry
+    
+    # Install scientific computing packages
+    conda install -c conda-forge \
+        numpy>=1.24.0 \
+        scipy>=1.10.0 \
+        pyscf>=2.3.0 \
+        pyyaml>=6.0 \
+        pydantic>=2.0.0 \
+        h5py \
+        matplotlib \
+        -y
+    
+    # Install additional packages
+    pip install --no-cache-dir \
+        pytest>=7.4.0 \
+        ruff>=0.0.285 \
+        mypy>=1.5.0
+    
+    # Create application directory
+    mkdir -p /opt/quantum-chemistry
+    
+    # Copy and install package (this will be bind-mounted in practice)
+    # For now, create placeholder structure
+    mkdir -p /opt/quantum-chemistry/src/quantum/chemistry
+    
+    # Set permissions
+    chmod -R 755 /opt/quantum-chemistry
+    
+    # Clean up
+    conda clean -a
+    apt-get clean
+
+%files
+    # Copy package files into container
+    src/ /opt/quantum-chemistry/src/
+    pyproject.toml /opt/quantum-chemistry/
+    README.md /opt/quantum-chemistry/
+
+%post
+    # Install the quantum chemistry package
+    cd /opt/quantum-chemistry
+    . /opt/conda/etc/profile.d/conda.sh
+    conda activate quantum-chemistry
+    pip install -e .
+
+%runscript
+    #!/bin/bash
+    # Default action when container is run
+    . /opt/conda/etc/profile.d/conda.sh
+    conda activate quantum-chemistry
+    
+    if [ $# -eq 0 ]; then
+        # No arguments - start interactive Python
+        python -c "
+        import quantum.chemistry
+        print('Quantum Chemistry Package - Interactive Mode')
+        print('Available modules:')
+        print('  - quantum.chemistry.multireference')
+        print('  - quantum.chemistry.active_space')
+        print('  - quantum.chemistry.hartree_fock')
+        print('  - quantum.chemistry.dft')
+        print('')
+        print('Example usage:')
+        print('>>> from quantum.chemistry.multireference import MultireferenceWorkflow')
+        print('>>> workflow = MultireferenceWorkflow()')
+        print('')
+        "
+        exec python
+    else
+        # Run provided command
+        exec "$@"
+    fi
+
+%test
+    # Test that the installation worked
+    . /opt/conda/etc/profile.d/conda.sh
+    conda activate quantum-chemistry
+    
+    echo "Testing quantum chemistry package installation..."
+    
+    # Test basic imports
+    python -c "import quantum.chemistry; print('✓ Main package import successful')"
+    python -c "from quantum.chemistry.multireference import CASSCFMethod; print('✓ Multireference methods import successful')"
+    python -c "from quantum.chemistry.active_space import find_active_space_avas; print('✓ Active space methods import successful')"
+    
+    # Test basic functionality
+    python -c "
+    from quantum.chemistry.multireference.benchmarking import create_standard_benchmark_datasets
+    datasets = create_standard_benchmark_datasets()
+    print(f'✓ Benchmark datasets created: {len(datasets)} datasets')
+    "
+    
+    # Test PySCF integration
+    python -c "
+    from pyscf import gto, scf
+    mol = gto.Mole()
+    mol.atom = 'H 0 0 0; H 0 0 0.74'
+    mol.basis = 'sto-3g'
+    mol.build()
+    mf = scf.RHF(mol)
+    mf.kernel()
+    print(f'✓ PySCF integration test: SCF energy = {mf.e_tot:.6f}')
+    "
+    
+    echo "All tests passed! Container is ready for use."

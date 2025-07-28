@@ -1,0 +1,127 @@
+# Docker Compose configuration for quantum chemistry development
+version: '3.8'
+
+services:
+  # Development environment with full toolchain
+  development:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: quantum-chemistry-dev
+    volumes:
+      - .:/opt/quantum-chemistry
+      - ./data:/opt/data
+      - ./notebooks:/opt/notebooks
+      - ./results:/opt/results
+    environment:
+      - PYTHONPATH=/opt/quantum-chemistry/src
+      - OMP_NUM_THREADS=4
+      - MKL_NUM_THREADS=4
+    working_dir: /opt/quantum-chemistry
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  # Interactive Jupyter environment
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: jupyter
+    container_name: quantum-chemistry-jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - .:/opt/quantum-chemistry
+      - ./notebooks:/opt/notebooks
+      - ./data:/opt/data
+      - ./results:/opt/results
+    environment:
+      - PYTHONPATH=/opt/quantum-chemistry/src
+      - JUPYTER_ENABLE_LAB=yes
+    restart: unless-stopped
+
+  # Testing environment
+  testing:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: testing
+    container_name: quantum-chemistry-test
+    volumes:
+      - .:/opt/quantum-chemistry
+    environment:
+      - PYTHONPATH=/opt/quantum-chemistry/src
+      - PYTEST_ARGS=-v --tb=short
+    command: >
+      bash -c "
+        echo 'Running quantum chemistry tests...' &&
+        python -m pytest tests/ -v --tb=short &&
+        echo 'Running benchmarking tests...' &&
+        python -m pytest tests/unit/test_benchmarking.py -v &&
+        echo 'All tests completed!'
+      "
+
+  # Production environment
+  production:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: quantum-chemistry-prod
+    volumes:
+      - ./data:/opt/data:ro
+      - ./results:/opt/results
+    environment:
+      - OMP_NUM_THREADS=8
+      - MKL_NUM_THREADS=8
+    restart: unless-stopped
+
+  # Benchmarking runner
+  benchmarking:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: quantum-chemistry-benchmark
+    volumes:
+      - .:/opt/quantum-chemistry
+      - ./data:/opt/data
+      - ./results:/opt/results
+    environment:
+      - PYTHONPATH=/opt/quantum-chemistry/src
+      - OMP_NUM_THREADS=8
+      - MKL_NUM_THREADS=8
+    working_dir: /opt/quantum-chemistry
+    command: >
+      bash -c "
+        echo 'Starting comprehensive benchmarking...' &&
+        python -c '
+        from quantum.chemistry.multireference.benchmarking import create_standard_benchmark_datasets, ValidationRunner
+        import json
+        
+        print(\"Creating standard benchmark datasets...\")
+        datasets = create_standard_benchmark_datasets()
+        
+        print(\"Running validation on QUESTDB subset...\")
+        runner = ValidationRunner()
+        report = runner.generate_validation_report(datasets[\"questdb\"], max_systems=5)
+        
+        print(\"Saving results...\")
+        with open(\"/opt/results/benchmark_report.json\", \"w\") as f:
+            json.dump(report, f, indent=2, default=str)
+        
+        print(\"Benchmarking completed! Results saved to /opt/results/benchmark_report.json\")
+        '
+      "
+
+volumes:
+  quantum-data:
+    driver: local
+  quantum-results:
+    driver: local
+
+networks:
+  default:
+    name: quantum-chemistry-network
