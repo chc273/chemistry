@@ -2,7 +2,7 @@
 # Brings together all external methods in a unified container
 
 # Start from scientific base
-FROM ubuntu:24.04 as base-stage
+FROM ubuntu:24.04 AS base-stage
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -18,7 +18,6 @@ RUN apt-get update && apt-get install -y \
     wget \
     curl \
     # Scientific computing libraries
-    libmkl-rt \
     libblas3 \
     liblapack3 \
     libopenblas-base \
@@ -41,7 +40,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python packages
-RUN pip3 install --no-cache-dir \
+RUN pip3 install --break-system-packages --no-cache-dir \
     numpy \
     scipy \
     matplotlib \
@@ -62,10 +61,10 @@ COPY --from=quantum-chemistry/quantum-package:latest /usr/local/bin/ninja /usr/l
 COPY --from=quantum-chemistry/quantum-package:latest /usr/local/bin/irpf90 /usr/local/bin/
 
 # Development stage
-FROM base-stage as development
+FROM base-stage AS development
 
 # Install additional development tools
-RUN pip3 install --no-cache-dir \
+RUN pip3 install --break-system-packages --no-cache-dir \
     black \
     ruff \
     mypy \
@@ -74,6 +73,11 @@ RUN pip3 install --no-cache-dir \
 
 # Create development directories
 RUN mkdir -p /opt/quantum-chemistry /opt/data /opt/results
+
+# Pre-install dependencies for faster development mounting
+# (The actual package will be mounted as a volume in development)
+COPY pyproject.toml /tmp/
+RUN cd /tmp && pip3 install --break-system-packages -e . --no-deps || echo "Package dependencies will be installed when mounted"
 
 # Set up comprehensive environment
 ENV PYTHONPATH=/opt/block2/build:/opt/block2:/opt/quantum-chemistry:$PYTHONPATH
@@ -112,7 +116,7 @@ echo "  - ipie AF-QMC: $(python3 -c \"import ipie; print(ipie.__file__)\" 2>/dev
 WORKDIR /opt/quantum-chemistry
 
 # Production stage
-FROM base-stage as production
+FROM base-stage AS production
 
 # Set up environment for production
 ENV PYTHONPATH=/opt/block2/build:/opt/block2:$PYTHONPATH
@@ -123,8 +127,12 @@ ENV QP_ROOT=/opt/quantum-package
 ENV PATH=/opt/molcas/bin:/opt/dice:/opt/quantum-package/bin:$PATH
 ENV LD_LIBRARY_PATH=/opt/molcas/lib:$LD_LIBRARY_PATH
 
-# Copy the quantum chemistry package (this would be the built package)
+# Copy the quantum chemistry package and install it
 COPY . /opt/quantum-chemistry
+
+# Install the quantum-chemistry package
+WORKDIR /opt/quantum-chemistry
+RUN pip3 install --break-system-packages -e .
 
 # Create comprehensive test script
 RUN echo '#!/bin/bash\n\

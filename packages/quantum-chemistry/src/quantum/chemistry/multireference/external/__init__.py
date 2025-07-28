@@ -22,6 +22,9 @@ from .openmolcas import CASPT2Method, OpenMolcasInterface
 from .afqmc import AFQMCMethod
 from .selected_ci import SelectedCIMethod, SHCIInterface, CIPSIInterface
 
+# Import Docker-based external method runner
+from ...external import ExternalMethodRunner
+
 __all__ = [
     "ExternalMethodInterface",
     "ExternalMethodResult", 
@@ -34,4 +37,5 @@ __all__ = [
     "SelectedCIMethod",
     "SHCIInterface",
     "CIPSIInterface",
+    "ExternalMethodRunner",
 ]

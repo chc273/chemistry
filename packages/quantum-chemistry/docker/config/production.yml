@@ -1,0 +1,78 @@
+# Production Configuration for Quantum Chemistry Package
+# This file contains production-specific settings
+
+# Application settings
+app:
+  name: "Quantum Chemistry Production"
+  version: "1.0.0"
+  debug: false
+  log_level: "INFO"
+  
+# Database configuration
+database:
+  host: "postgres-prod"
+  port: 5432
+  name: "quantum_chemistry_prod"
+  user: "qc_prod"
+  # Password comes from environment variable DB_PASSWORD
+  
+# Redis configuration
+redis:
+  host: "redis-prod"
+  port: 6379
+  db: 0
+  
+# External methods configuration
+external_methods:
+  # Block2 DMRG settings
+  block2:
+    enabled: true
+    max_bond_dimension: 2000
+    max_sweeps: 20
+    default_threads: 4
+    
+  # OpenMolcas CASPT2 settings  
+  openmolcas:
+    enabled: true
+    default_memory: 4000  # MB
+    scratch_dir: "/opt/molcas/scratch"
+    
+  # Dice SHCI settings
+  dice:
+    enabled: true
+    max_determinants: 100000
+    pt2_threshold: 1e-5
+    
+  # Quantum Package CIPSI settings
+  quantum_package:
+    enabled: true
+    pt2_max: 1e-4
+    n_det_max: 100000
+    
+  # ipie AF-QMC settings
+  ipie:
+    enabled: true
+    default_walkers: 100
+    default_steps: 1000
+    
+# Performance settings
+performance:
+  max_concurrent_jobs: 4
+  job_timeout: 3600  # seconds
+  result_cache_ttl: 86400  # 24 hours
+  
+# Security settings
+security:
+  allowed_hosts:
+    - "localhost"
+    - "quantum-chemistry-prod"
+  cors_origins:
+    - "https://quantum.example.com"
+  
+# Monitoring and logging
+monitoring:
+  enable_metrics: true
+  metrics_port: 9090
+  log_file: "/opt/logs/quantum_chemistry.log"
+  log_rotation: "daily"
+  log_retention: 30  # days

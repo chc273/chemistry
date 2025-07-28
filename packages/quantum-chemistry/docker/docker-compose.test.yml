@@ -1,0 +1,118 @@
+# Docker Compose Override for Testing
+# Usage: docker-compose -f docker-compose.external.yml -f docker-compose.test.yml run test
+
+version: '3.8'
+
+services:
+  # Test runner service
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.combined
+      target: development
+    image: quantum-chemistry/test:latest
+    container_name: qc-test
+    volumes:
+      - ../:/opt/quantum-chemistry
+      - test-cache:/root/.cache
+      - test-results:/opt/test-results
+    environment:
+      - PYTHONPATH=/opt/block2/build:/opt/block2:/opt/quantum-chemistry
+      - PYTEST_CURRENT_TEST=true
+      - CI=true
+      - TEST_PARALLEL=true
+    working_dir: /opt/quantum-chemistry
+    command: >
+      bash -c "
+        echo 'Installing package in test mode...' &&
+        pip install -e .[dev,external] --no-deps &&
+        echo 'Running test suite...' &&
+        python -m pytest tests/ -v --tb=short --cov=quantum.chemistry --cov-report=html:/opt/test-results/coverage --cov-report=term-missing --junit-xml=/opt/test-results/junit.xml &&
+        echo 'Running integration tests...' &&
+        python examples/external_methods_usage.py &&
+        echo 'Test suite completed successfully!'
+      "
+
+  # Test individual method containers
+  test-block2:
+    extends:
+      service: block2
+    environment:
+      - TEST_MODE=true
+    command: /opt/test_block2.sh
+
+  test-openmolcas:
+    extends:
+      service: openmolcas
+    environment:
+      - TEST_MODE=true
+    command: /opt/test_molcas.sh
+
+  test-dice:
+    extends:
+      service: dice
+    environment:
+      - TEST_MODE=true
+    command: /opt/test_dice.sh
+
+  test-quantum-package:
+    extends:
+      service: quantum-package
+    environment:
+      - TEST_MODE=true
+    command: /opt/test_qp2.sh
+
+  # Performance benchmarking
+  benchmark:
+    extends:
+      service: test
+    volumes:
+      - benchmark-results:/opt/benchmark-results
+    environment:
+      - BENCHMARK_MODE=true
+      - OMP_NUM_THREADS=4
+    command: >
+      bash -c "
+        echo 'Running performance benchmarks...' &&
+        python -m pytest tests/benchmarks/ -v --benchmark-json=/opt/benchmark-results/benchmark.json &&
+        echo 'Benchmarks completed!'
+      "
+
+  # Memory profiling
+  profile:
+    extends:
+      service: test
+    volumes:
+      - profile-results:/opt/profile-results
+    environment:
+      - PROFILE_MODE=true
+    command: >
+      bash -c "
+        echo 'Running memory profiling...' &&
+        pip install memory_profiler &&
+        python -m memory_profiler examples/external_methods_usage.py > /opt/profile-results/memory_profile.txt &&
+        echo 'Memory profiling completed!'
+      "
+
+  # Linting and code quality
+  lint:
+    extends:
+      service: test
+    command: >
+      bash -c "
+        echo 'Running code quality checks...' &&
+        ruff check quantum/ tests/ examples/ &&
+        mypy quantum/ &&
+        black --check quantum/ tests/ examples/ &&
+        echo 'Code quality checks passed!'
+      "
+
+volumes:
+  test-cache:
+  test-results:
+  benchmark-results:
+  profile-results:
+
+networks:
+  default:
+    name: quantum-chemistry-test-network

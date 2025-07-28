@@ -1,0 +1,139 @@
+# Docker Compose Override for Production
+# Usage: docker-compose -f docker-compose.external.yml -f docker-compose.prod.yml up
+
+version: '3.8'
+
+services:
+  # Production quantum chemistry service
+  quantum-chemistry-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile.combined
+      target: production
+    image: quantum-chemistry/prod:latest
+    container_name: qc-production
+    restart: unless-stopped
+    depends_on:
+      - postgres-prod
+      - redis-prod
+    volumes:
+      # Production data volumes
+      - qc-prod-data:/opt/data
+      - qc-prod-results:/opt/results
+      - qc-prod-logs:/opt/logs
+      # Configuration
+      - ./config/production.yml:/opt/config/config.yml:ro
+    environment:
+      - ENVIRONMENT=production
+      - PYTHONPATH=/opt/block2/build:/opt/block2:/opt/quantum-chemistry
+      - MOLCAS=/opt/molcas
+      - MOLCAS_MEM=4000
+      - DICE_ROOT=/opt/dice
+      - QP_ROOT=/opt/quantum-package
+      - OMP_NUM_THREADS=8
+      - DATABASE_URL=postgresql://qc_prod:${DB_PASSWORD}@postgres-prod:5432/quantum_chemistry_prod
+      - REDIS_URL=redis://redis-prod:6379/0
+      - LOG_LEVEL=INFO
+    healthcheck:
+      test: ["CMD", "python", "-c", "import quantum; print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 16G
+        reservations:
+          cpus: '4.0'
+          memory: 8G
+
+  # Production database
+  postgres-prod:
+    image: postgres:15
+    container_name: qc-postgres-prod
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=quantum_chemistry_prod
+      - POSTGRES_USER=qc_prod
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - postgres-prod-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qc_prod -d quantum_chemistry_prod"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Production Redis
+  redis-prod:
+    image: redis:7
+    container_name: qc-redis-prod
+    restart: unless-stopped
+    volumes:
+      - redis-prod-data:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: qc-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - qc-prod-logs:/var/log/nginx
+    depends_on:
+      - quantum-chemistry-prod
+
+  # Log aggregation
+  fluentd:
+    image: fluent/fluentd:v1.16-debian-1
+    container_name: qc-fluentd
+    restart: unless-stopped
+    volumes:
+      - ./config/fluentd.conf:/fluentd/etc/fluent.conf:ro
+      - qc-prod-logs:/opt/logs
+      - fluentd-logs:/fluentd/log
+    depends_on:
+      - quantum-chemistry-prod
+
+volumes:
+  # Production volumes
+  qc-prod-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/quantum-chemistry/data
+  qc-prod-results:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/quantum-chemistry/results
+  qc-prod-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/quantum-chemistry/logs
+  postgres-prod-data:
+  redis-prod-data:
+  fluentd-logs:
+
+networks:
+  default:
+    name: quantum-chemistry-prod-network
+    driver: bridge

@@ -1,0 +1,103 @@
+# Docker Compose Override for Development
+# Usage: docker-compose -f docker-compose.external.yml -f docker-compose.dev.yml up
+
+version: '3.8'
+
+services:
+  # Enhanced development environment
+  quantum-chemistry-dev:
+    build:
+      target: development
+    volumes:
+      # Mount source code for live development
+      - ../:/opt/quantum-chemistry
+      # Mount config and data directories
+      - ~/.jupyter:/root/.jupyter
+      - dev-cache:/root/.cache
+      - dev-pip-cache:/root/.cache/pip
+      # Development data persistence
+      - qc-dev-data:/opt/data
+      - qc-dev-results:/opt/results
+    ports:
+      - "8888:8888"    # Jupyter Lab
+      - "8889:8080"    # Alternative web interface
+      - "5678:5678"    # Python debugger (debugpy)
+    environment:
+      - PYTHONPATH=/opt/block2/build:/opt/block2:/opt/quantum-chemistry
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=quantum-dev
+      - PYTHONDONTWRITEBYTECODE=1  # Don't create .pyc files
+      - PYTHONUNBUFFERED=1         # Real-time output
+      - DEBUG=1                    # Enable debug mode
+    command: >
+      bash -c "
+        pip install -e . --no-deps &&
+        jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --LabApp.token='quantum-dev' &
+        echo 'Development environment ready!' &&
+        echo 'Jupyter Lab: http://localhost:8888 (token: quantum-dev)' &&
+        bash
+      "
+
+  # Individual method containers with development mounts
+  block2:
+    volumes:
+      - ../examples:/opt/examples
+      - dev-block2-data:/opt/block2/data
+    environment:
+      - PYTHONPATH=/opt/block2/build:/opt/block2:/opt/examples
+
+  openmolcas:
+    volumes:
+      - ../examples:/opt/examples
+      - dev-molcas-data:/opt/molcas/data
+    environment:
+      - MOLCAS_WORKDIR=/opt/molcas/data
+
+  dice:
+    volumes:
+      - ../examples:/opt/examples
+      - dev-dice-data:/opt/dice/data
+
+  quantum-package:
+    volumes:
+      - ../examples:/opt/examples
+      - dev-qp2-data:/opt/quantum-package/data
+
+  # Development database for results
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: qc-postgres-dev
+    environment:
+      - POSTGRES_DB=quantum_chemistry_dev
+      - POSTGRES_USER=qc_dev
+      - POSTGRES_PASSWORD=dev_password
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # Redis for caching and job queues
+  redis-dev:
+    image: redis:7-alpine
+    container_name: qc-redis-dev
+    volumes:
+      - redis-dev-data:/data
+    ports:
+      - "6379:6379"
+
+volumes:
+  # Development-specific volumes
+  dev-cache:
+  dev-pip-cache:
+  dev-block2-data:
+  dev-molcas-data:
+  dev-dice-data:
+  dev-qp2-data:
+  postgres-dev-data:
+  redis-dev-data:
+  qc-dev-data:
+  qc-dev-results:
+
+networks:
+  default:
+    name: quantum-chemistry-dev-network

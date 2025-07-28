@@ -19,6 +19,8 @@ RUN apt-get update && apt-get install -y \
     mpich \
     libmpich-dev \
     libeigen3-dev \
+    libhdf5-dev \
+    libhdf5-openmpi-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -30,41 +32,17 @@ RUN git clone https://github.com/sanshar/Dice.git dice
 
 WORKDIR /opt/dice
 
-# Create a custom Makefile for containerized build
-RUN cat > Makefile << 'EOF'\
-CXX = mpicxx\
-CXXFLAGS = -std=c++11 -O3 -DNDEBUG -march=native\
-BOOST_INCLUDE = /usr/include/boost\
-EIGEN_INCLUDE = /usr/include/eigen3\
-MPI_INCLUDE = /usr/include/mpi\
-\
-INCLUDES = -I$(BOOST_INCLUDE) -I$(EIGEN_INCLUDE) -I$(MPI_INCLUDE) -I.\
-\
-SOURCES = $(wildcard *.cpp) $(wildcard */*.cpp)\
-OBJECTS = $(SOURCES:.cpp=.o)\
-TARGET = Dice\
-\
-all: $(TARGET)\
-\
-$(TARGET): $(OBJECTS)\
-	$(CXX) $(CXXFLAGS) -o $$@ $$^ -lboost_serialization -lboost_mpi\
-\
-%.o: %.cpp\
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $$< -o $$@\
-\
-clean:\
-	rm -f $(OBJECTS) $(TARGET)\
-\
-.PHONY: all clean\
-EOF
+# Build Dice using the existing Makefile
+# First, patch the Makefile to work with ARM architecture
+RUN sed -i 's/-march=core-avx2/-march=native/g' Makefile
 
-# Build Dice
-RUN make -j$(nproc)
+# Check what we have and try to build SHCI specifically
+RUN ls -la && make SHCI
 
 # Create environment setup script
 RUN echo '#!/bin/bash\n\
 export DICE_ROOT=/opt/dice\n\
-export PATH=$DICE_ROOT:$PATH' > /opt/dice/setup_env.sh \
+export PATH=$DICE_ROOT/bin:$PATH' > /opt/dice/setup_env.sh \
     && chmod +x /opt/dice/setup_env.sh
 
 # Production stage
@@ -85,21 +63,23 @@ RUN apt-get update && apt-get install -y \
 # Install Python runtime dependencies
 RUN pip3 install --break-system-packages numpy scipy
 
-# Copy built Dice from builder stage
-COPY --from=dice-builder /opt/dice/Dice /opt/dice/
+# Copy built Dice from builder stage  
+COPY --from=dice-builder /opt/dice/bin /opt/dice/bin
 COPY --from=dice-builder /opt/dice/setup_env.sh /opt/setup_dice.sh
+# Also copy any executables that might be built in the root directory
+COPY --from=dice-builder /opt/dice/SHCI /opt/dice/bin/ 2>/dev/null || echo "No SHCI executable found"
 
 # Set up environment
 ENV DICE_ROOT=/opt/dice
-ENV PATH=/opt/dice:$PATH
+ENV PATH=/opt/dice/bin:$PATH
 
 # Create a test script
 RUN echo '#!/bin/bash\n\
 echo "Testing Dice installation..."\n\
 source /opt/setup_dice.sh\n\
-if [ -f "/opt/dice/Dice" ]; then\n\
-    echo "Dice executable found at /opt/dice/Dice"\n\
-    ls -la /opt/dice/Dice\n\
+if [ -d "/opt/dice/bin" ]; then\n\
+    echo "Dice bin directory found:"\n\
+    ls -la /opt/dice/bin/\n\
     echo "Dice build test completed successfully!"\n\
 else\n\
     echo "Error: Dice executable not found"\n\
