@@ -23,12 +23,12 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "quantum-core==0.1.0",
-    "quantum-chemistry==0.1.0",
-    "quantum-materials==0.1.0",
-    "quantum-computing==0.1.0",
-    "quantum-ml==0.1.0",
-    "quantum-cli==0.1.0",
+    "quantum-core",
+    "quantum-chemistry",
+    "quantum-materials",
+    "quantum-computing",
+    "quantum-ml",
+    "quantum-cli",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +62,14 @@ members = [
     "packages/quantum-ml",
     "packages/quantum-cli",
 ]
+
+[tool.uv.sources]
+quantum-core = { workspace = true }
+quantum-chemistry = { workspace = true }
+quantum-materials = { workspace = true }
+quantum-computing = { workspace = true }
+quantum-ml = { workspace = true }
+quantum-cli = { workspace = true }
 
 [tool.ruff]
 line-length = 88

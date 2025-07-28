@@ -1,0 +1,296 @@
+# AVAS Default Orbital Selections
+# Default atomic orbital labels for AVAS active space selection
+# Based on valence electron configurations for each element
+
+# Format: element_symbol: [list of orbital labels]
+# Orbital labels follow PySCF/Molden convention
+
+H:
+  - "H 1s"
+
+He:
+  - "He 1s"
+
+Li:
+  - "Li 2s"
+
+Be:
+  - "Be 2s"
+
+B:
+  - "B 2s"
+  - "B 2p"
+
+C:
+  - "C 2s"
+  - "C 2p"
+
+N:
+  - "N 2s"
+  - "N 2p"
+
+O:
+  - "O 2s"
+  - "O 2p"
+
+F:
+  - "F 2s"
+  - "F 2p"
+
+Ne:
+  - "Ne 2s"
+  - "Ne 2p"
+
+Na:
+  - "Na 3s"
+
+Mg:
+  - "Mg 3s"
+
+Al:
+  - "Al 3s"
+  - "Al 3p"
+
+Si:
+  - "Si 3s"
+  - "Si 3p"
+
+P:
+  - "P 3s"
+  - "P 3p"
+
+S:
+  - "S 3s"
+  - "S 3p"
+
+Cl:
+  - "Cl 3s"
+  - "Cl 3p"
+
+Ar:
+  - "Ar 3s"
+  - "Ar 3p"
+
+K:
+  - "K 4s"
+
+Ca:
+  - "Ca 4s"
+
+# Transition metals (3d series)
+Sc:
+  - "Sc 4s"
+  - "Sc 3d"
+
+Ti:
+  - "Ti 4s"
+  - "Ti 3d"
+
+V:
+  - "V 4s"
+  - "V 3d"
+
+Cr:
+  - "Cr 4s"
+  - "Cr 3d"
+
+Mn:
+  - "Mn 4s"
+  - "Mn 3d"
+
+Fe:
+  - "Fe 4s"
+  - "Fe 3d"
+
+Co:
+  - "Co 4s"
+  - "Co 3d"
+
+Ni:
+  - "Ni 4s"
+  - "Ni 3d"
+
+Cu:
+  - "Cu 4s"
+  - "Cu 3d"
+
+Zn:
+  - "Zn 4s"
+  - "Zn 3d"
+
+Ga:
+  - "Ga 4s"
+  - "Ga 4p"
+
+Ge:
+  - "Ge 4s"
+  - "Ge 4p"
+
+As:
+  - "As 4s"
+  - "As 4p"
+
+Se:
+  - "Se 4s"
+  - "Se 4p"
+
+Br:
+  - "Br 4s"
+  - "Br 4p"
+
+Kr:
+  - "Kr 4s"
+  - "Kr 4p"
+
+# 4d transition metals
+Y:
+  - "Y 5s"
+  - "Y 4d"
+
+Zr:
+  - "Zr 5s"
+  - "Zr 4d"
+
+Nb:
+  - "Nb 5s"
+  - "Nb 4d"
+
+Mo:
+  - "Mo 5s"
+  - "Mo 4d"
+
+Tc:
+  - "Tc 5s"
+  - "Tc 4d"
+
+Ru:
+  - "Ru 5s"
+  - "Ru 4d"
+
+Rh:
+  - "Rh 5s"
+  - "Rh 4d"
+
+Pd:
+  - "Pd 5s"
+  - "Pd 4d"
+
+Ag:
+  - "Ag 5s"
+  - "Ag 4d"
+
+Cd:
+  - "Cd 5s"
+  - "Cd 4d"
+
+# 5d transition metals
+La:
+  - "La 6s"
+  - "La 5d"
+
+Hf:
+  - "Hf 6s"
+  - "Hf 5d"
+
+Ta:
+  - "Ta 6s"
+  - "Ta 5d"
+
+W:
+  - "W 6s"
+  - "W 5d"
+
+Re:
+  - "Re 6s"
+  - "Re 5d"
+
+Os:
+  - "Os 6s"
+  - "Os 5d"
+
+Ir:
+  - "Ir 6s"
+  - "Ir 5d"
+
+Pt:
+  - "Pt 6s"
+  - "Pt 5d"
+
+Au:
+  - "Au 6s"
+  - "Au 5d"
+
+Hg:
+  - "Hg 6s"
+  - "Hg 5d"
+
+# Lanthanides (including 4f orbitals for those with significant f character)
+Ce:
+  - "Ce 6s"
+  - "Ce 5d"
+  - "Ce 4f"
+
+Pr:
+  - "Pr 6s"
+  - "Pr 5d"
+  - "Pr 4f"
+
+Nd:
+  - "Nd 6s"
+  - "Nd 5d"
+  - "Nd 4f"
+
+Pm:
+  - "Pm 6s"
+  - "Pm 5d"
+  - "Pm 4f"
+
+Sm:
+  - "Sm 6s"
+  - "Sm 5d"
+  - "Sm 4f"
+
+Eu:
+  - "Eu 6s"
+  - "Eu 5d"
+  - "Eu 4f"
+
+Gd:
+  - "Gd 6s"
+  - "Gd 5d"
+  - "Gd 4f"
+
+Tb:
+  - "Tb 6s"
+  - "Tb 5d"
+  - "Tb 4f"
+
+Dy:
+  - "Dy 6s"
+  - "Dy 5d"
+  - "Dy 4f"
+
+Ho:
+  - "Ho 6s"
+  - "Ho 5d"
+  - "Ho 4f"
+
+Er:
+  - "Er 6s"
+  - "Er 5d"
+  - "Er 4f"
+
+Tm:
+  - "Tm 6s"
+  - "Tm 5d"
+  - "Tm 4f"
+
+Yb:
+  - "Yb 6s"
+  - "Yb 5d"
+  - "Yb 4f"
+
+Lu:
+  - "Lu 6s"
+  - "Lu 5d"
+  - "Lu 4f" 

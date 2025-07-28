@@ -6,7 +6,6 @@ build-backend = "hatchling.build"
 name = "quantum-computing"
 version = "0.1.0"
 description = "Quantum computing algorithms for quantum chemistry"
-readme = "README.md"
 license = { text = "MIT" }
 authors = [
     { name = "Chemistry Team", email = "team@quantum.com" }
@@ -23,7 +22,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "quantum-core==0.1.0",
+    "quantum-core",
     "qiskit>=0.45.0",
     "qiskit-nature>=0.7.0",
     "numpy>=1.24.0",
@@ -36,6 +35,9 @@ dev = [
     "ruff>=0.0.285",
     "mypy>=1.5.0",
 ]
+
+[tool.uv.sources]
+quantum-core = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quantum"]

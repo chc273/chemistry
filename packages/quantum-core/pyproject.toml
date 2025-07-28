@@ -6,7 +6,6 @@ build-backend = "hatchling.build"
 name = "quantum-core"
 version = "0.1.0"
 description = "Core classes and base interfaces for quantum chemistry calculations with ASE/PyMatGen integration"
-readme = "README.md"
 license = { text = "MIT" }
 authors = [
     { name = "Chemistry Team", email = "team@quantum.com" }

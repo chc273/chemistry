@@ -6,7 +6,6 @@ build-backend = "hatchling.build"
 name = "quantum-materials"
 version = "0.1.0"
 description = "Materials science calculations and analysis with PyMatGen integration"
-readme = "README.md"
 license = { text = "MIT" }
 authors = [
     { name = "Chemistry Team", email = "team@quantum.com" }
@@ -23,8 +22,8 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "quantum-core==0.1.0",
-    "quantum-chemistry==0.1.0",
+    "quantum-core",
+    "quantum-chemistry",
     "pymatgen>=2023.8.10",
     "numpy>=1.24.0",
     "scipy>=1.10.0",
@@ -36,6 +35,10 @@ dev = [
     "ruff>=0.0.285",
     "mypy>=1.5.0",
 ]
+
+[tool.uv.sources]
+quantum-core = { workspace = true }
+quantum-chemistry = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quantum"]

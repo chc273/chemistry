@@ -6,18 +6,19 @@ build-backend = "hatchling.build"
 name = "quantum-chemistry"
 version = "0.1.0"
 description = "Quantum chemistry calculation methods with PySCF and QCEngine integration"
-readme = "README.md"
 license = { text = "MIT" }
 authors = [
     { name = "Chemistry Team", email = "team@quantum.com" }
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "quantum-core==0.1.0",
+    "quantum-core",
     "numpy>=1.24.0",
     "scipy>=1.10.0",
     "pyscf>=2.3.0",
     "qcengine>=0.28.0",
+    "pyyaml>=6.0",
+    "pydantic>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +27,9 @@ dev = [
     "ruff>=0.0.285",
     "mypy>=1.5.0",
 ]
+
+[tool.uv.sources]
+quantum-core = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quantum"]

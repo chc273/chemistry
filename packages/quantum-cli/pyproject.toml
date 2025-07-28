@@ -6,7 +6,6 @@ build-backend = "hatchling.build"
 name = "quantum-cli"
 version = "0.1.0"
 description = "Command-line interface for quantum chemistry calculations"
-readme = "README.md"
 license = { text = "MIT" }
 authors = [
     { name = "Chemistry Team", email = "team@quantum.com" }
@@ -22,11 +21,11 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "quantum-core==0.1.0",
-    "quantum-chemistry==0.1.0",
-    "quantum-materials==0.1.0",
-    "quantum-ml==0.1.0",
-    "quantum-computing==0.1.0",
+    "quantum-core",
+    "quantum-chemistry",
+    "quantum-materials",
+    "quantum-ml",
+    "quantum-computing",
     "click>=8.1.0",
     "rich>=13.0.0",
     "typer>=0.9.0",
@@ -38,6 +37,13 @@ dev = [
     "ruff>=0.0.285",
     "mypy>=1.5.0",
 ]
+
+[tool.uv.sources]
+quantum-core = { workspace = true }
+quantum-chemistry = { workspace = true }
+quantum-materials = { workspace = true }
+quantum-ml = { workspace = true }
+quantum-computing = { workspace = true }
 
 [project.scripts]
 quantum = "quantum.cli.main:app"
