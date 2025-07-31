@@ -33,7 +33,15 @@ class TestCASSCFMethod:
         
         # Basic validation
         assert result.method == "CASSCF"
-        assert result.energy <= h2o_scf.e_tot  # CASSCF energy should be at most equal to SCF
+        
+        # CASSCF energy should be at most equal to SCF (with numerical tolerance)
+        # Use a small tolerance (1e-12 Hartree ≈ 0.27 μeV) for numerical precision
+        energy_tolerance = 1e-12
+        assert result.energy <= (h2o_scf.e_tot + energy_tolerance), (
+            f"CASSCF energy ({result.energy:.14f}) should not exceed SCF energy "
+            f"({h2o_scf.e_tot:.14f}) by more than {energy_tolerance} Hartree"
+        )
+        
         assert result.n_active_electrons == active_space.n_active_electrons
         assert result.n_active_orbitals == active_space.n_active_orbitals
         assert result.correlation_energy is not None

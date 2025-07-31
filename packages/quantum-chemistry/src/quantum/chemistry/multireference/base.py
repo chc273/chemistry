@@ -85,6 +85,11 @@ class MultireferenceMethod(ABC):
         """Initialize method with configuration parameters."""
         self.config = kwargs
         self.method_type = self._get_method_type()
+        
+        # GPU acceleration configuration
+        self.use_gpu = kwargs.get('use_gpu', True)
+        self.gpu_memory_fraction = kwargs.get('gpu_memory_fraction', 0.8)
+        self.partition_strategy = kwargs.get('partition_strategy', None)
     
     @abstractmethod
     def _get_method_type(self) -> MultireferenceMethodType:
@@ -169,6 +174,42 @@ class MultireferenceMethod(ABC):
         """
         # Default implementation - should be overridden by subclasses
         return {}
+    
+    def supports_gpu_acceleration(self) -> bool:
+        """
+        Check if this method implementation supports GPU acceleration.
+        
+        Returns:
+            True if GPU acceleration is supported
+        """
+        # Default implementation - can be overridden by subclasses
+        return False
+    
+    def estimate_gpu_speedup(self,
+                            scf_obj: Union[scf.hf.SCF, scf.uhf.UHF],
+                            active_space: ActiveSpaceResult) -> float:
+        """
+        Estimate potential GPU speedup for this calculation.
+        
+        Args:
+            scf_obj: SCF object
+            active_space: Active space information
+            
+        Returns:
+            Estimated speedup factor (1.0 = no speedup)
+        """
+        if not self.supports_gpu_acceleration():
+            return 1.0
+            
+        # Basic heuristic based on active space size
+        n_active = active_space.n_active_orbitals
+        
+        if n_active <= 6:
+            return 3.0  # Small systems: modest GPU benefit
+        elif n_active <= 12:
+            return 8.0  # Medium systems: good GPU benefit
+        else:
+            return 15.0  # Large systems: excellent GPU benefit
 
 
 class MethodSelector:
@@ -207,7 +248,8 @@ class MethodSelector:
                         active_space: ActiveSpaceResult,
                         system_type: Optional[str] = None,
                         accuracy_target: str = "standard",
-                        cost_constraint: str = "moderate") -> MultireferenceMethodType:
+                        cost_constraint: str = "moderate",
+                        prefer_gpu: bool = True) -> MultireferenceMethodType:
         """
         Recommend optimal method based on system characteristics.
         
@@ -217,6 +259,7 @@ class MethodSelector:
             system_type: Chemical system type hint
             accuracy_target: Desired accuracy level
             cost_constraint: Computational cost constraint
+            prefer_gpu: Consider GPU acceleration in recommendation
             
         Returns:
             Recommended method type
@@ -225,8 +268,18 @@ class MethodSelector:
         if system_type is None:
             system_type = self._classify_system(scf_obj, active_space)
         
-        # Method selection logic
+        # Method selection logic with GPU consideration
         n_active = active_space.n_active_orbitals
+        
+        # Check GPU availability if preferred
+        gpu_available = False
+        if prefer_gpu:
+            try:
+                from quantum.chemistry.acceleration.gpu_manager import get_gpu_manager
+                gpu_manager = get_gpu_manager()
+                gpu_available = gpu_manager.is_gpu_available()
+            except ImportError:
+                pass
         
         if system_type == "organic" and n_active <= 12:
             if accuracy_target == "high":
@@ -238,13 +291,21 @@ class MethodSelector:
             if n_active <= 10:
                 return MultireferenceMethodType.NEVPT2
             else:
-                return MultireferenceMethodType.DMRG_NEVPT2
+                # Prefer GPU-accelerated NEVPT2 if available and fits
+                if gpu_available and n_active <= 14:
+                    return MultireferenceMethodType.NEVPT2
+                else:
+                    return MultireferenceMethodType.DMRG_NEVPT2
                 
         elif n_active > 16:
             if cost_constraint == "high":
                 return MultireferenceMethodType.DMRG
             else:
-                return MultireferenceMethodType.SHCI
+                # GPU acceleration can make larger NEVPT2 feasible
+                if gpu_available and n_active <= 20:
+                    return MultireferenceMethodType.NEVPT2
+                else:
+                    return MultireferenceMethodType.SHCI
                 
         else:
             return MultireferenceMethodType.NEVPT2

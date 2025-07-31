@@ -39,6 +39,24 @@ from .multireference.methods import (
 from .multireference.workflows import (
     MultireferenceWorkflow,
 )
+from .diagnostics import (
+    MultireferenceDiagnostics,
+    IntelligentMethodSelector,
+    DiagnosticConfig,
+    MultireferenceCharacter,
+    DiagnosticResult,
+    DiagnosticMethod,
+    SystemClassification,
+    calculate_homo_lumo_gap,
+    calculate_spin_contamination,
+    calculate_natural_orbital_occupations,
+    calculate_fractional_occupation_density,
+    calculate_bond_order_fluctuation,
+    calculate_t1_diagnostic,
+    calculate_d1_diagnostic,
+    calculate_correlation_recovery,
+    calculate_s_diagnostic,
+)
 
 __version__ = "0.1.0"
 
@@ -74,4 +92,21 @@ __all__ = [
     "NEVPT2Method",
     "CASPT2Method",
     "MultireferenceWorkflow",
+    # Multireference diagnostics
+    "MultireferenceDiagnostics",
+    "IntelligentMethodSelector", 
+    "DiagnosticConfig",
+    "MultireferenceCharacter",
+    "DiagnosticResult",
+    "DiagnosticMethod",
+    "SystemClassification",
+    "calculate_homo_lumo_gap",
+    "calculate_spin_contamination",
+    "calculate_natural_orbital_occupations",
+    "calculate_fractional_occupation_density",
+    "calculate_bond_order_fluctuation",
+    "calculate_t1_diagnostic", 
+    "calculate_d1_diagnostic",
+    "calculate_correlation_recovery",
+    "calculate_s_diagnostic",
 ]

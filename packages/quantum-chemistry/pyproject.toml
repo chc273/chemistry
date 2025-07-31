@@ -19,6 +19,21 @@ dependencies = [
     "qcengine>=0.28.0",
     "pyyaml>=6.0",
     "pydantic>=2.0.0",
+    # Enhanced plotting and visualization
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "plotly>=5.15.0",
+    # Advanced statistical analysis
+    "scikit-learn>=1.3.0",
+    "statsmodels>=0.14.0",
+    # Data management and analysis
+    "pandas>=2.0.0",
+    "h5py>=3.9.0",
+    "tables>=3.8.0",
+    # Request handling for database downloads
+    "requests>=2.31.0",
+    "tqdm>=4.65.0",
+    "block2>=0.5.3",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +44,22 @@ dev = [
 ]
 external = [
     "ipie>=0.1.0",
+]
+benchmarking = [
+    # LaTeX report generation
+    "jinja2>=3.1.0",
+    # Advanced uncertainty quantification
+    "uncertainties>=3.1.7",
+    # High-performance numerical computing
+    "numba>=0.57.0",
+    # Memory-efficient data processing
+    "dask>=2023.6.0",
+    # Molecular file format support
+    "ase>=3.22.0",
+    "cclib>=1.7.0",
+    # Web-based interactive reports
+    "bokeh>=3.2.0",
+    "jupyter>=1.0.0",
 ]
 
 [tool.uv.sources]

@@ -91,6 +91,7 @@ class ExternalMethodInterface(ABC):
                  work_dir: Optional[str] = None,
                  keep_files: bool = False,
                  use_container: Optional[bool] = None,
+                 skip_validation: bool = False,
                  **kwargs):
         """
         Initialize external method interface.
@@ -100,6 +101,7 @@ class ExternalMethodInterface(ABC):
             work_dir: Working directory for calculations (None for temp dir)
             keep_files: Whether to keep temporary files after calculation
             use_container: Force container usage (None for auto-detect)
+            skip_validation: Skip software validation (for testing)
             **kwargs: Additional method-specific parameters
         """
         self.software_path = software_path
@@ -108,9 +110,11 @@ class ExternalMethodInterface(ABC):
         self.force_container = use_container
         self.use_container = False  # Will be set during validation
         self.method_params = kwargs
+        self.skip_validation = skip_validation
         
-        # Validate software availability
-        self._validate_software()
+        # Validate software availability unless skipped
+        if not skip_validation:
+            self._validate_software()
     
     @abstractmethod
     def _get_software_name(self) -> str:

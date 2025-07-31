@@ -38,6 +38,7 @@ class SelectedCIMethod(MultireferenceMethod):
         software_path: Optional[str] = None,
         work_dir: Optional[str] = None,
         keep_files: bool = False,
+        skip_validation: bool = False,
         **kwargs,
     ):
         """
@@ -52,6 +53,7 @@ class SelectedCIMethod(MultireferenceMethod):
             software_path: Path to external software
             work_dir: Working directory
             keep_files: Whether to keep temporary files
+            skip_validation: Skip software validation (for testing)
             **kwargs: Additional parameters
         """
         # Set attributes before calling super().__init__()
@@ -69,6 +71,7 @@ class SelectedCIMethod(MultireferenceMethod):
                 keep_files=keep_files,
                 pt2_threshold=pt2_threshold,
                 max_determinants=max_determinants,
+                skip_validation=skip_validation,
             )
         elif self.method_type == "cipsi":
             self.interface = CIPSIInterface(
@@ -77,6 +80,7 @@ class SelectedCIMethod(MultireferenceMethod):
                 keep_files=keep_files,
                 pt2_threshold=pt2_threshold,
                 max_determinants=max_determinants,
+                skip_validation=skip_validation,
             )
         else:
             raise ValueError(f"Unknown selected CI method: {method_type}")

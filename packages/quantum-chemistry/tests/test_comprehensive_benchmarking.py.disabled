@@ -1,0 +1,646 @@
+"""
+Comprehensive tests for the enhanced benchmarking suite.
+
+Tests cover database integration, statistical analysis, visualization,
+and report generation capabilities.
+"""
+
+import pytest
+import tempfile
+import json
+from pathlib import Path
+from unittest.mock import Mock, patch, MagicMock
+import numpy as np
+import pandas as pd
+
+from quantum.chemistry.validation.databases import (
+    DatabaseManager, W4_11Database, G2_97Database, QuestDBDatabase, TMC151Database,
+    MolecularEntry, ReferenceDataEntry, PropertyType
+)
+from quantum.chemistry.validation.benchmarks import (
+    ComprehensiveBenchmarkSuite, BenchmarkConfiguration, BenchmarkResult,
+    BenchmarkScope, BenchmarkTarget
+)
+from quantum.chemistry.validation.benchmarks.statistical_analysis import (
+    AdvancedStatisticalAnalyzer, UncertaintyQuantifier, ErrorMetrics
+)
+from quantum.chemistry.validation.benchmarks.visualization import PublicationQualityPlotter
+from quantum.chemistry.validation.reporting import (
+    ReportGenerator, ReportConfiguration
+)
+from quantum.chemistry.active_space import ActiveSpaceMethod
+
+
+class TestDatabaseIntegration:
+    """Test database integration functionality."""
+    
+    def test_database_manager_initialization(self):
+        """Test database manager initialization."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_manager = DatabaseManager(cache_dir=Path(temp_dir))
+            
+            assert len(db_manager.databases) == 4
+            assert "w4_11" in db_manager.databases
+            assert "g2_97" in db_manager.databases
+            assert "questdb" in db_manager.databases
+            assert "tmc_151" in db_manager.databases
+    
+    def test_w4_11_database(self):
+        """Test W4-11 database functionality."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db = W4_11Database(cache_dir=Path(temp_dir))
+            
+            # Test properties
+            assert db.name == "W4-11"
+            assert "140 total atomization energies" in db.description
+            assert db.url is not None
+            assert "Karton" in db.reference
+            
+            # Test loading (uses embedded data)
+            db.load()
+            molecules = db.get_all_molecules()
+            
+            assert len(molecules) > 0
+            assert any(mol.name == "H2" for mol in molecules)
+            assert any(mol.name == "H2O" for mol in molecules)
+            
+            # Test molecule retrieval
+            h2 = db.get_molecule("H2")
+            assert h2 is not None
+            assert h2.formula == "H2"
+            assert h2.charge == 0
+            assert h2.multiplicity == 1
+            
+            # Test reference data
+            ref_data = h2.get_reference_value(PropertyType.ATOMIZATION_ENERGY)
+            assert ref_data is not None
+            assert ref_data.value > 0
+            assert ref_data.unit == "kcal/mol"
+    
+    def test_questdb_database(self):
+        """Test QUESTDB functionality."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db = QuestDBDatabase(cache_dir=Path(temp_dir))
+            
+            assert db.name == "QUESTDB"
+            assert "excitation energies" in db.description
+            
+            db.load()
+            molecules = db.get_all_molecules()
+            
+            assert len(molecules) > 0
+            
+            # Test excitation energy data
+            for mol in molecules[:3]:  # Test first few molecules
+                excitation_data = [
+                    ref for ref in mol.reference_data 
+                    if ref.property_type == PropertyType.EXCITATION_ENERGY
+                ]
+                assert len(excitation_data) > 0
+                
+                for exc in excitation_data:
+                    assert exc.unit == "eV"
+                    assert exc.value > 0
+    
+    def test_database_search(self):
+        """Test cross-database search functionality."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_manager = DatabaseManager(cache_dir=Path(temp_dir))
+            
+            # Search by formula
+            h2o_results = db_manager.search_by_formula("H2O")
+            assert len(h2o_results) > 0
+            
+            # Search by property
+            atomization_results = db_manager.search_by_property(
+                PropertyType.ATOMIZATION_ENERGY,
+                min_value=100,  # kcal/mol
+                max_value=500
+            )
+            assert len(atomization_results) > 0
+
+
+class TestComprehensiveBenchmarkSuite:
+    """Test comprehensive benchmarking suite."""
+    
+    @pytest.fixture
+    def benchmark_config(self):
+        """Create test benchmark configuration."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = BenchmarkConfiguration(
+                study_name="test_benchmark",
+                description="Test benchmarking study",
+                output_directory=Path(temp_dir),
+                scope=BenchmarkScope.ACTIVE_SPACE_SELECTION,
+                targets=[BenchmarkTarget.GROUND_STATE_ENERGY],
+                databases=["w4_11"],
+                max_molecules_per_db=3,
+                active_space_methods=[ActiveSpaceMethod.AVAS],
+                basis_sets=["sto-3g"],
+                max_workers=1,
+                timeout_seconds=30
+            )
+            yield config
+    
+    def test_benchmark_suite_initialization(self, benchmark_config):
+        """Test benchmark suite initialization."""
+        suite = ComprehensiveBenchmarkSuite(benchmark_config)
+        
+        assert suite.config.study_name == "test_benchmark"
+        assert suite.config.scope == BenchmarkScope.ACTIVE_SPACE_SELECTION
+        assert len(suite.results) == 0
+        assert len(suite.failed_calculations) == 0
+    
+    def test_molecular_dataset_preparation(self, benchmark_config):
+        """Test molecular dataset preparation."""
+        suite = ComprehensiveBenchmarkSuite(benchmark_config)
+        
+        molecules = suite.prepare_molecular_dataset()
+        
+        assert len(molecules) > 0
+        assert len(molecules) <= benchmark_config.max_molecules_per_db
+        
+        # Check molecule properties
+        for mol in molecules:
+            assert hasattr(mol, 'name')
+            assert hasattr(mol, 'formula')
+            assert hasattr(mol, 'geometry')
+            assert mol.computational_difficulty in benchmark_config.difficulty_levels
+    
+    @patch('quantum.chemistry.validation.benchmarks.comprehensive_suite.find_active_space_avas')
+    @patch('pyscf.scf.RHF')
+    def test_active_space_calculation(self, mock_rhf, mock_avas, benchmark_config):
+        """Test single active space calculation."""
+        # Mock PySCF components
+        mock_mf = Mock()
+        mock_mf.converged = True
+        mock_mf.e_tot = -1.0
+        mock_mf.kernel.return_value = None
+        mock_rhf.return_value = mock_mf
+        
+        # Mock active space result
+        from quantum.chemistry.active_space import ActiveSpaceResult
+        mock_as_result = ActiveSpaceResult(
+            method="avas",
+            n_active_electrons=2,
+            n_active_orbitals=2,
+            active_orbitals=[0, 1],
+            orbital_energies=np.array([-0.5, 0.5]),
+            occupation_numbers=np.array([2.0, 0.0]),
+            selection_info={"threshold": 0.2}
+        )
+        mock_avas.return_value = mock_as_result
+        
+        suite = ComprehensiveBenchmarkSuite(benchmark_config)
+        
+        # Create test task
+        from quantum.chemistry.validation.databases.base import MolecularEntry, ReferenceDataEntry
+        
+        mol_entry = MolecularEntry(
+            name="H2",
+            formula="H2", 
+            geometry="H 0 0 0\nH 0 0 0.74",
+            charge=0,
+            multiplicity=1,
+            database_id="test_001",
+            reference_data=[
+                ReferenceDataEntry(
+                    property_type=PropertyType.ATOMIZATION_ENERGY,
+                    value=104.2,
+                    unit="kcal/mol",
+                    method="Experimental",
+                    level_of_theory="Experimental",
+                    source="Test"
+                )
+            ]
+        )
+        
+        task = {
+            "molecule": mol_entry,
+            "active_space_method": ActiveSpaceMethod.AVAS,
+            "basis_set": "sto-3g",
+            "calculation_id": "test_calc_001"
+        }
+        
+        result = suite._run_active_space_calculation(task)
+        
+        assert result is not None
+        assert result.calculation_id == "test_calc_001"
+        assert result.molecule_name == "H2"
+        assert result.active_space_method == "avas"
+        assert result.converged == True
+        assert result.n_active_electrons == 2
+        assert result.n_active_orbitals == 2
+
+
+class TestStatisticalAnalysis:
+    """Test advanced statistical analysis functionality."""
+    
+    @pytest.fixture
+    def sample_errors(self):
+        """Generate sample error data for testing."""
+        np.random.seed(42)  # For reproducible tests
+        
+        method_errors = {
+            "method_a": np.random.normal(0, 0.001, 50),  # Small errors
+            "method_b": np.random.normal(0.002, 0.003, 50),  # Larger errors with bias
+            "method_c": np.random.normal(-0.001, 0.002, 50)  # Negative bias
+        }
+        
+        return method_errors
+    
+    def test_uncertainty_quantifier(self):
+        """Test uncertainty quantification."""
+        quantifier = UncertaintyQuantifier()
+        
+        # Sample data
+        computed = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        reference = np.array([0.9, 2.1, 2.9, 4.2, 4.8])
+        computed_unc = np.array([0.1, 0.1, 0.1, 0.1, 0.1])
+        
+        analysis = quantifier.propagate_uncertainties(
+            computed, reference, computed_unc
+        )
+        
+        assert analysis.total_uncertainty > 0
+        assert analysis.systematic_uncertainty >= 0
+        assert analysis.statistical_uncertainty >= 0
+    
+    def test_advanced_statistical_analyzer(self, sample_errors):
+        """Test advanced statistical analyzer."""
+        analyzer = AdvancedStatisticalAnalyzer()
+        
+        # Test comprehensive error analysis
+        for method, errors in sample_errors.items():
+            computed = errors + np.random.normal(0, 0.1, len(errors))
+            reference = np.zeros_like(errors)
+            
+            metrics = analyzer.comprehensive_error_analysis(
+                computed, reference
+            )
+            
+            assert isinstance(metrics, ErrorMetrics)
+            assert metrics.mae >= 0
+            assert metrics.rmse >= 0
+            assert metrics.n_samples == len(errors)
+            assert len(metrics.mae_ci) == 2
+            assert metrics.mae_ci[0] <= metrics.mae <= metrics.mae_ci[1]
+    
+    def test_bayesian_method_comparison(self, sample_errors):
+        """Test Bayesian method comparison (if available)."""
+        analyzer = AdvancedStatisticalAnalyzer()
+        
+        # This will fall back to frequentist if PyMC3 not available
+        comparison = analyzer.bayesian_method_comparison(sample_errors)
+        
+        assert "analysis_type" in comparison
+        assert comparison["analysis_type"] in ["bayesian", "frequentist"]
+        
+        if comparison["analysis_type"] == "bayesian":
+            assert "method_summaries" in comparison
+            assert "pairwise_comparisons" in comparison
+        else:
+            assert "anova_f_statistic" in comparison
+            assert "pairwise_comparisons" in comparison
+    
+    def test_outlier_detection(self, sample_errors):
+        """Test outlier detection methods."""
+        analyzer = AdvancedStatisticalAnalyzer()
+        
+        # Add some outliers
+        errors_with_outliers = np.concatenate([
+            sample_errors["method_a"],
+            np.array([0.1, -0.1, 0.15])  # Clear outliers
+        ])
+        
+        # Test different outlier detection methods
+        for method in ["iqr", "zscore"]:
+            outlier_info = analyzer.outlier_detection(errors_with_outliers, method=method)
+            
+            assert "outlier_indices" in outlier_info
+            assert "n_outliers" in outlier_info
+            assert "outlier_fraction" in outlier_info
+            assert outlier_info["method"] == method
+            assert outlier_info["n_outliers"] > 0  # Should detect the added outliers
+
+
+class TestVisualization:
+    """Test publication-quality visualization."""
+    
+    @pytest.fixture
+    def sample_data(self):
+        """Generate sample data for visualization tests."""
+        np.random.seed(42)
+        
+        method_errors = {
+            "AVAS": np.random.normal(0, 0.001, 30),
+            "APC": np.random.normal(0.002, 0.003, 30),
+            "DMET": np.random.normal(-0.001, 0.002, 30)
+        }
+        
+        method_metrics = {}
+        for method, errors in method_errors.items():
+            method_metrics[method] = Mock()
+            method_metrics[method].mae = np.mean(np.abs(errors))
+            method_metrics[method].rmse = np.sqrt(np.mean(errors**2))
+            method_metrics[method].r2 = 0.95 - np.random.random() * 0.1
+            method_metrics[method].max_error = np.max(np.abs(errors))
+            method_metrics[method].mae_ci = (
+                method_metrics[method].mae * 0.9,
+                method_metrics[method].mae * 1.1
+            )
+            method_metrics[method].rmse_ci = (
+                method_metrics[method].rmse * 0.9,
+                method_metrics[method].rmse * 1.1
+            )
+        
+        return {
+            "method_errors": method_errors,
+            "method_metrics": method_metrics
+        }
+    
+    def test_plotter_initialization(self):
+        """Test plotter initialization."""
+        plotter = PublicationQualityPlotter()
+        
+        assert plotter.style == "publication"
+        assert hasattr(plotter, 'method_colors')
+        assert hasattr(plotter, 'database_colors')
+        assert plotter.figsize == (10, 8)
+        assert plotter.dpi == 300
+    
+    def test_error_distribution_plot(self, sample_data):
+        """Test error distribution plotting."""
+        plotter = PublicationQualityPlotter()
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "error_distribution.png"
+            
+            fig = plotter.plot_error_distribution(
+                sample_data["method_errors"],
+                output_path=output_path,
+                title="Test Error Distribution"
+            )
+            
+            assert fig is not None
+            assert output_path.exists()
+    
+    def test_method_comparison_plot(self, sample_data):
+        """Test method comparison plotting."""
+        plotter = PublicationQualityPlotter()
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "method_comparison.png"
+            
+            fig = plotter.plot_method_comparison(
+                sample_data["method_metrics"],
+                output_path=output_path,
+                title="Test Method Comparison"
+            )
+            
+            assert fig is not None
+            assert output_path.exists()
+    
+    def test_parity_plots(self, sample_data):
+        """Test parity plot generation."""
+        plotter = PublicationQualityPlotter()
+        
+        # Create parity data
+        parity_data = {}
+        for method, errors in sample_data["method_errors"].items():
+            reference = np.random.normal(-1.0, 0.1, len(errors))
+            computed = reference + errors
+            
+            parity_data[method] = {
+                "computed": computed,
+                "reference": reference
+            }
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "parity_plots.png"
+            
+            fig = plotter.plot_parity_plots(
+                parity_data,
+                output_path=output_path,
+                title="Test Parity Plots"
+            )
+            
+            assert fig is not None
+            assert output_path.exists()
+
+
+class TestReportGeneration:
+    """Test automated report generation."""
+    
+    @pytest.fixture
+    def report_config(self):
+        """Create test report configuration."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = ReportConfiguration(
+                title="Test Benchmarking Study",
+                authors=["Test Author"],
+                affiliation="Test Institution",
+                abstract="This is a test abstract for the benchmarking study.",
+                keywords=["quantum chemistry", "benchmarking", "test"],
+                output_formats=["html", "markdown"],  # Skip PDF for testing
+                output_directory=Path(temp_dir)
+            )
+            yield config
+    
+    @pytest.fixture
+    def sample_benchmark_results(self):
+        """Create sample benchmark results."""
+        results = []
+        
+        for i in range(5):
+            result = BenchmarkResult(
+                calculation_id=f"test_{i:03d}",
+                molecule_name=f"molecule_{i}",
+                database_source="test_db",
+                active_space_method="avas",
+                basis_set="sto-3g",
+                n_active_electrons=2 + i,
+                n_active_orbitals=2 + i,
+                computed_energy=-1.0 - i * 0.1,
+                reference_energy=-1.1 - i * 0.1,
+                energy_error=0.1,
+                absolute_error=0.1,
+                relative_error=0.1,
+                wall_time=10.0 + i,
+                converged=True
+            )
+            results.append(result)
+        
+        return results
+    
+    @pytest.fixture 
+    def sample_error_metrics(self):
+        """Create sample error metrics."""
+        metrics = {}
+        
+        for method in ["avas", "apc", "dmet"]:
+            mock_metrics = Mock()
+            mock_metrics.mae = 0.001 + hash(method) % 1000 / 100000
+            mock_metrics.rmse = mock_metrics.mae * 1.2
+            mock_metrics.max_error = mock_metrics.mae * 5
+            mock_metrics.r2 = 0.95 - hash(method) % 100 / 1000
+            mock_metrics.n_samples = 50
+            mock_metrics.mae_ci = (mock_metrics.mae * 0.9, mock_metrics.mae * 1.1)
+            mock_metrics.rmse_ci = (mock_metrics.rmse * 0.9, mock_metrics.rmse * 1.1)
+            mock_metrics.bias_ci = (-0.001, 0.001)
+            mock_metrics.is_normal = True
+            mock_metrics.mean_error = 0.0
+            mock_metrics.std_error = mock_metrics.mae * 0.8
+            
+            metrics[method] = mock_metrics
+        
+        return metrics
+    
+    def test_report_generator_initialization(self, report_config):
+        """Test report generator initialization."""
+        generator = ReportGenerator(report_config)
+        
+        assert generator.config.title == "Test Benchmarking Study"
+        assert len(generator.config.authors) == 1
+        assert hasattr(generator, 'latex_formatter')
+        assert hasattr(generator, 'html_formatter')
+    
+    def test_report_data_preparation(self, report_config, sample_benchmark_results, sample_error_metrics):
+        """Test report data preparation."""
+        generator = ReportGenerator(report_config)
+        
+        statistical_analysis = {
+            "method_performance": {"test": "data"},
+            "system_difficulty": {"test": "data"}
+        }
+        
+        report_data = generator._prepare_report_data(
+            sample_benchmark_results,
+            sample_error_metrics,
+            statistical_analysis
+        )
+        
+        assert "metadata" in report_data
+        assert "summary" in report_data
+        assert "error_metrics" in report_data
+        assert "statistical_analysis" in report_data
+        assert "method_ranking" in report_data
+        
+        # Check metadata
+        assert report_data["metadata"]["title"] == report_config.title
+        assert report_data["metadata"]["total_calculations"] == len(sample_benchmark_results)
+        
+        # Check summary
+        assert report_data["summary"]["converged_calculations"] == len(sample_benchmark_results)
+        assert report_data["summary"]["convergence_rate"] == 1.0
+    
+    def test_html_report_generation(self, report_config, sample_benchmark_results, sample_error_metrics):
+        """Test HTML report generation."""
+        generator = ReportGenerator(report_config)
+        
+        statistical_analysis = {"test": "data"}
+        
+        report_data = generator._prepare_report_data(
+            sample_benchmark_results,
+            sample_error_metrics,
+            statistical_analysis
+        )
+        
+        html_file = generator._generate_html_report(report_data)
+        
+        assert html_file.exists()
+        assert html_file.suffix == ".html"
+        
+        # Check content
+        content = html_file.read_text()
+        assert report_config.title in content
+        assert "Test Author" in content
+        assert "avas" in content.lower()
+    
+    def test_markdown_report_generation(self, report_config, sample_benchmark_results, sample_error_metrics):
+        """Test Markdown report generation."""
+        generator = ReportGenerator(report_config)
+        
+        statistical_analysis = {"test": "data"}
+        
+        report_data = generator._prepare_report_data(
+            sample_benchmark_results,
+            sample_error_metrics,
+            statistical_analysis
+        )
+        
+        md_file = generator._generate_markdown_report(report_data)
+        
+        assert md_file.exists()
+        assert md_file.suffix == ".md"
+        
+        # Check content
+        content = md_file.read_text()
+        assert f"# {report_config.title}" in content
+        assert "Test Author" in content
+        assert "| Method |" in content  # Table header
+
+
+class TestIntegrationWorkflows:
+    """Integration tests for complete workflows."""
+    
+    def test_end_to_end_workflow(self):
+        """Test a complete end-to-end benchmarking workflow."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Setup configuration
+            benchmark_config = BenchmarkConfiguration(
+                study_name="integration_test",
+                description="Integration test workflow",
+                output_directory=Path(temp_dir) / "benchmark",
+                scope=BenchmarkScope.ACTIVE_SPACE_SELECTION,
+                targets=[BenchmarkTarget.GROUND_STATE_ENERGY],
+                databases=["w4_11"],
+                max_molecules_per_db=2,  # Small for testing
+                active_space_methods=[ActiveSpaceMethod.AVAS],
+                basis_sets=["sto-3g"],
+                max_workers=1,
+                timeout_seconds=30,
+                generate_plots=False,  # Skip plots for integration test
+                create_report=False
+            )
+            
+            # Initialize suite
+            suite = ComprehensiveBenchmarkSuite(benchmark_config)
+            
+            # Prepare dataset
+            molecules = suite.prepare_molecular_dataset()
+            assert len(molecules) > 0
+            
+            # Test configuration saving
+            config_file = benchmark_config.output_directory / "benchmark_config.json"
+            assert benchmark_config.output_directory.exists()
+    
+    @pytest.mark.slow
+    def test_database_loading_performance(self):
+        """Test database loading performance (marked as slow)."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_manager = DatabaseManager(cache_dir=Path(temp_dir))
+            
+            import time
+            start_time = time.time()
+            
+            # Load all databases
+            db_manager.load_all_databases()
+            
+            end_time = time.time()
+            loading_time = end_time - start_time
+            
+            # Should load within reasonable time (adjust as needed)
+            assert loading_time < 30.0  # 30 seconds max
+            
+            # Check that data was loaded
+            stats = db_manager.get_all_database_stats()
+            assert len(stats) == 4
+            
+            for db_name, db_stats in stats.items():
+                assert db_stats.total_molecules > 0
+
+
+if __name__ == "__main__":
+    # Run tests with pytest
+    pytest.main([__file__, "-v"])

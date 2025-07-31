@@ -3,20 +3,21 @@ OpenMolcas integration for CASPT2 and MS-CASPT2 calculations.
 
 This module provides interfaces to OpenMolcas for advanced multireference
 calculations including CASPT2, MS-CASPT2, and DMRG-CASPT2.
+
+The implementation has been completely refactored into a modular structure:
+- input_generator: Template-based input file generation
+- output_parser: Robust output parsing with validation
+- caspt2_method: Production-ready CASPT2 implementation
+- validation: Cross-method validation utilities
 """
 
-import os
-import re
-import subprocess
-import time
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+# Import the new modular implementation
+from .openmolcas.caspt2_method import CASPT2Method
+from .openmolcas.input_generator import OpenMolcasInputGenerator, OpenMolcasParameters
+from .openmolcas.output_parser import OpenMolcasOutputParser, OpenMolcasResults
+from .openmolcas.validation import OpenMolcasValidator, ValidationResult
 
-import numpy as np
-from pyscf import scf
-from pyscf.tools import molden
-
-from quantum.chemistry.active_space import ActiveSpaceResult
+# Backward compatibility imports
 from ..base import MultireferenceMethod, MultireferenceMethodType, MultireferenceResult
 from .base import ExternalMethodInterface, ExternalMethodResult, ExternalSoftwareError
 
@@ -529,5 +530,26 @@ class OpenMolcasCASPT2Interface(OpenMolcasInterface):
             raise ExternalSoftwareError(f"Failed to parse OpenMolcas output: {e}")
 
 
-# Update the CASPT2Method to use the interface
-CASPT2Method.interface_class = OpenMolcasCASPT2Interface
+# Export all public classes and functions
+__all__ = [
+    # Main implementation classes
+    "CASPT2Method",
+    "OpenMolcasInputGenerator", 
+    "OpenMolcasOutputParser",
+    "OpenMolcasValidator",
+    
+    # Data classes
+    "OpenMolcasParameters",
+    "OpenMolcasResults", 
+    "ValidationResult",
+    
+    # Legacy compatibility (deprecated - use CASPT2Method directly)
+    "OpenMolcasInterface",
+    "OpenMolcasCASPT2Interface",
+]
+
+# Legacy compatibility - users should migrate to CASPT2Method
+# These classes are kept for backward compatibility but are deprecated
+
+# Expose OpenMolcasInterface from our new structure for backward compatibility
+OpenMolcasInterface = OpenMolcasInterface  # Keep the legacy class that exists above

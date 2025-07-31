@@ -1,9 +1,9 @@
 """Create FCIDUMP files from active space selections with proper core energy treatment."""
 
-from typing import Literal, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
-from pyscf import gto, scf
+from pyscf import ao2mo, gto, scf, symm
 from pyscf.mcscf import CASSCF
 from pyscf.tools.fcidump import from_integrals, from_mcscf
 
@@ -101,11 +101,204 @@ def from_active_space_result(
     return filename
 
 
+def to_openmolcas_fcidump(
+    active_space_result: ActiveSpaceResult,
+    scf_obj: Union[scf.hf.SCF, scf.uhf.UHF],
+    filename: str,
+    orbital_reordering: Optional[List[int]] = None,
+    symmetry_labels: Optional[List[str]] = None,
+) -> str:
+    """
+    Create OpenMolcas-compatible FCIDUMP file with proper orbital ordering.
+    
+    OpenMolcas has specific requirements for FCIDUMP files:
+    - Orbitals must be ordered by symmetry
+    - Symmetry labels must be provided
+    - Integral format must match OpenMolcas conventions
+    
+    Args:
+        active_space_result: Result from active space selection
+        scf_obj: Converged SCF object
+        filename: Output FCIDUMP filename
+        orbital_reordering: Manual orbital reordering (None for automatic)
+        symmetry_labels: Symmetry labels for each orbital
+        
+    Returns:
+        Path to created FCIDUMP file
+    """
+    ncas = active_space_result.n_active_orbitals
+    nelecas = active_space_result.n_active_electrons
+    mo_coeff = active_space_result.orbital_coefficients
+    
+    # Create minimal CASSCF object to get effective integrals
+    casscf = create_minimal_casscf_for_integrals(scf_obj, ncas, nelecas, mo_coeff)
+    h1eff, ecore = casscf.get_h1eff()
+    h2eff_2d = casscf.get_h2eff()
+    # Convert h2eff from 2D to 4D format for OpenMolcas
+    h2eff = ao2mo.restore(1, h2eff_2d, ncas)
+    
+    # Apply orbital reordering if specified
+    if orbital_reordering is not None:
+        if len(orbital_reordering) != ncas:
+            raise ValueError(
+                f"Orbital reordering length ({len(orbital_reordering)}) "
+                f"must match number of active orbitals ({ncas})"
+            )
+        # Reorder integrals according to specified ordering
+        h1eff = h1eff[np.ix_(orbital_reordering, orbital_reordering)]
+        h2eff = h2eff[np.ix_(orbital_reordering, orbital_reordering, 
+                           orbital_reordering, orbital_reordering)]
+    
+    # Handle electron count for OpenMolcas format
+    if isinstance(nelecas, tuple):
+        n_alpha, n_beta = nelecas
+        ms = n_alpha - n_beta
+        total_nelecas = n_alpha + n_beta
+    else:
+        ms = 0
+        total_nelecas = nelecas
+    
+    # Write FCIDUMP with OpenMolcas-compatible format
+    _write_openmolcas_fcidump(
+        filename, h1eff, h2eff, ncas, total_nelecas, ecore, ms, 
+        symmetry_labels
+    )
+    
+    return filename
+
+
+def _write_openmolcas_fcidump(
+    filename: str,
+    h1eff: np.ndarray,
+    h2eff: np.ndarray,
+    ncas: int,
+    nelecas: int,
+    ecore: float,
+    ms: int,
+    symmetry_labels: Optional[List[str]] = None,
+):
+    """
+    Write FCIDUMP file in OpenMolcas-compatible format.
+    
+    Args:
+        filename: Output filename
+        h1eff: Effective 1-electron integrals
+        h2eff: 2-electron integrals in active space
+        ncas: Number of active orbitals
+        nelecas: Number of active electrons
+        ecore: Core energy
+        ms: Spin multiplicity (2S)
+        symmetry_labels: Symmetry labels for orbitals
+    """
+    with open(filename, 'w') as f:
+        # Write header
+        f.write("&FCI NORB={:d},NELEC={:d},MS2={:d},\n".format(
+            ncas, nelecas, ms
+        ))
+        
+        # Add symmetry information if available
+        if symmetry_labels:
+            orbsym_str = ",".join(str(_get_symmetry_index(label)) 
+                                for label in symmetry_labels)
+            f.write("ORBSYM={},\n".format(orbsym_str))
+        
+        f.write("ISYM=1,\n")
+        f.write("&END\n")
+        
+        # Write two-electron integrals (ijkl) format
+        for i in range(ncas):
+            for j in range(ncas):
+                for k in range(ncas):
+                    for l in range(ncas):
+                        if abs(h2eff[i,j,k,l]) > 1e-15:
+                            f.write(f"{h2eff[i,j,k,l]:20.12E} "
+                                  f"{i+1:4d} {j+1:4d} {k+1:4d} {l+1:4d}\n")
+        
+        # Write one-electron integrals
+        for i in range(ncas):
+            for j in range(ncas):
+                if abs(h1eff[i,j]) > 1e-15:
+                    f.write(f"{h1eff[i,j]:20.12E} "
+                          f"{i+1:4d} {j+1:4d}    0    0\n")
+        
+        # Write core energy
+        f.write(f"{ecore:20.12E}    0    0    0    0\n")
+
+
+def _get_symmetry_index(symmetry_label: str) -> int:
+    """
+    Convert symmetry label to OpenMolcas symmetry index.
+    
+    Args:
+        symmetry_label: Symmetry label (e.g., 'A1', 'B2', etc.)
+        
+    Returns:
+        Symmetry index for OpenMolcas
+    """
+    # Basic mapping for common point groups
+    # This is a simplified version - full implementation would need
+    # proper point group analysis
+    symmetry_map = {
+        'A1': 1, 'A': 1,    # Totally symmetric
+        'A2': 2,
+        'B1': 3, 'B': 2,   # Antisymmetric
+        'B2': 4,
+        'E': 5,            # Doubly degenerate
+        'T1': 6,           # Triply degenerate
+        'T2': 7,
+    }
+    
+    # Try exact match first
+    if symmetry_label in symmetry_map:
+        return symmetry_map[symmetry_label]
+    
+    # Try prefix match for compound labels
+    for label, index in symmetry_map.items():
+        if symmetry_label.startswith(label):
+            return index
+    
+    # Default to totally symmetric if not found
+    return 1
+
+
+def detect_orbital_symmetries(
+    scf_obj: Union[scf.hf.SCF, scf.uhf.UHF],
+    active_orbitals: np.ndarray,
+) -> List[str]:
+    """
+    Detect symmetry labels for active orbitals.
+    
+    Args:
+        scf_obj: SCF object with molecule
+        active_orbitals: Active orbital coefficients
+        
+    Returns:
+        List of symmetry labels for each active orbital
+    """
+    mol = scf_obj.mol
+    
+    # If molecule has symmetry, use it
+    if hasattr(mol, 'symmetry') and mol.symmetry:
+        try:
+            # Use PySCF's symmetry analysis
+            irrep_ids = symm.label_orb_symm(
+                mol, mol.irrep_id, mol.symm_orb, active_orbitals
+            )
+            return [mol.irrep_name[i] for i in irrep_ids]
+        except (AttributeError, IndexError):
+            pass
+    
+    # Fallback: assign all orbitals to totally symmetric representation
+    n_orbitals = active_orbitals.shape[1]
+    return ['A1'] * n_orbitals
+
+
 def active_space_to_fcidump(
     scf_obj: Union[scf.hf.SCF, scf.uhf.UHF],
     filename: str,
     method: Union[str, ActiveSpaceMethod] = ActiveSpaceMethod.AVAS,
     approach: Literal["casscf", "effective"] = "effective",
+    openmolcas_compatible: bool = False,
     **method_kwargs,
 ) -> str:
     """
@@ -113,12 +306,12 @@ def active_space_to_fcidump(
 
     Args:
         scf_obj: Converged SCF object (RHF, UHF, or ROHF)
-        system: Quantum system object
         filename: Output filename for the FCIDUMP file
         method: Active space selection method
         approach: How to treat core electrons:
             - "casscf": Run full CASSCF optimization (most accurate)
             - "effective": Use effective integrals without CASSCF optimization (recommended)
+        openmolcas_compatible: Generate OpenMolcas-compatible FCIDUMP format
         **method_kwargs: Method-specific parameters
 
     Returns:
@@ -126,10 +319,11 @@ def active_space_to_fcidump(
 
     Examples:
         >>> # Recommended approach - effective integrals without CASSCF cost
-        >>> active_space_to_fcidump(rhf_obj, mol, "active.fcidump", "avas", "effective", threshold=0.3)
+        >>> active_space_to_fcidump(rhf_obj, "active.fcidump", "avas", "effective", threshold=0.3)
 
-        >>> # Full CASSCF for highest accuracy
-        >>> active_space_to_fcidump(rhf_obj, mol, "active.fcidump", "avas", "casscf", threshold=0.3)
+        >>> # OpenMolcas-compatible format
+        >>> active_space_to_fcidump(rhf_obj, "active.fcidump", "avas", "effective", 
+        ...                        openmolcas_compatible=True, threshold=0.3)
     """
     # Select active space using unified finder
     finder = UnifiedActiveSpaceFinder()
@@ -143,7 +337,17 @@ def active_space_to_fcidump(
 
     elif approach == "effective":
         # Effective integrals without CASSCF optimization
-        return from_active_space_result(result, scf_obj, filename)
+        if openmolcas_compatible:
+            # Use OpenMolcas-compatible format
+            symmetry_labels = detect_orbital_symmetries(
+                scf_obj, result.orbital_coefficients
+            )
+            return to_openmolcas_fcidump(
+                result, scf_obj, filename, symmetry_labels=symmetry_labels
+            )
+        else:
+            # Standard PySCF format
+            return from_active_space_result(result, scf_obj, filename)
 
     else:
         raise ValueError(f"Unknown approach '{approach}'. Use 'casscf' or 'effective'")

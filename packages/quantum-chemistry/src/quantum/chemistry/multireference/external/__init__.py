@@ -18,7 +18,13 @@ from .base import (
 )
 
 from .dmrg import DMRGMethod
-from .openmolcas import CASPT2Method, OpenMolcasInterface
+from .openmolcas import CASPT2Method
+# Legacy compatibility import - users should import directly from openmolcas module
+try:
+    from .openmolcas import OpenMolcasInterface
+except ImportError:
+    # Fallback for backward compatibility
+    from .openmolcas.caspt2_method import OpenMolcasCASPT2Interface as OpenMolcasInterface
 from .afqmc import AFQMCMethod
 from .selected_ci import SelectedCIMethod, SHCIInterface, CIPSIInterface
 

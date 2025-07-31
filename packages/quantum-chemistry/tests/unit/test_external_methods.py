@@ -20,6 +20,9 @@ try:
     EXTERNAL_METHODS_AVAILABLE = True
 except ImportError:
     EXTERNAL_METHODS_AVAILABLE = False
+    # Create a placeholder for missing ExternalSoftwareError
+    class ExternalSoftwareError(Exception):
+        pass
 
 
 @pytest.mark.skipif(
@@ -44,6 +47,7 @@ class TestDMRGMethod:
 
     def test_dmrg_initialization(self):
         """Test DMRG method initialization."""
+        # For DMRG, we catch the import error differently since it validates during __init__
         try:
             dmrg_method = DMRGMethod(
                 bond_dimension=500, max_sweeps=10, post_correction=None
@@ -53,7 +57,7 @@ class TestDMRGMethod:
             assert dmrg_method.max_sweeps == 10
             assert dmrg_method.post_correction is None
 
-        except ImportError:
+        except (ImportError, ExternalSoftwareError):
             pytest.skip("block2 not available for DMRG testing")
 
     def test_dmrg_parameter_recommendations(self):
@@ -78,7 +82,7 @@ class TestDMRGMethod:
             # Should have higher bond dimension for TM systems
             assert tm_params["bond_dimension"] >= params["bond_dimension"]
 
-        except ImportError:
+        except (ImportError, ExternalSoftwareError):
             pytest.skip("block2 not available for DMRG testing")
 
     def test_dmrg_cost_estimation(self):
@@ -94,7 +98,7 @@ class TestDMRGMethod:
             assert cost["bond_dimension"] == 1000
             assert all(v >= 0 for v in cost.values() if isinstance(v, (int, float)))
 
-        except ImportError:
+        except (ImportError, ExternalSoftwareError):
             pytest.skip("block2 not available for DMRG testing")
 
 
@@ -116,7 +120,7 @@ class TestAFQMCMethod:
             assert afqmc_method.n_steps == 500
             assert afqmc_method.timestep == 0.01
 
-        except ImportError:
+        except (ImportError, ExternalSoftwareError):
             pytest.skip("ipie not available for AF-QMC testing")
 
     def test_afqmc_parameter_recommendations(self):
@@ -142,7 +146,7 @@ class TestAFQMCMethod:
             # Should have more walkers for TM systems
             assert tm_params["n_walkers"] >= params["n_walkers"]
 
-        except ImportError:
+        except (ImportError, ExternalSoftwareError):
             pytest.skip("ipie not available for AF-QMC testing")
 
     def test_afqmc_cost_estimation(self):
@@ -161,7 +165,7 @@ class TestAFQMCMethod:
             assert cost["n_walkers"] == 100
             assert all(v >= 0 for v in cost.values() if isinstance(v, (int, float)))
 
-        except ImportError:
+        except (ImportError, ExternalSoftwareError):
             pytest.skip("ipie not available for AF-QMC testing")
 
 
@@ -175,7 +179,10 @@ class TestSelectedCIMethod:
         """Test SHCI method initialization."""
         try:
             shci_method = SelectedCIMethod(
-                method_type="shci", pt2_threshold=1e-4, max_determinants=100000
+                method_type="shci", 
+                pt2_threshold=1e-4, 
+                max_determinants=100000,
+                skip_validation=True  # Skip software validation for testing
             )
 
             assert shci_method.method_type == "shci"
@@ -189,7 +196,10 @@ class TestSelectedCIMethod:
         """Test CIPSI method initialization."""
         try:
             cipsi_method = SelectedCIMethod(
-                method_type="cipsi", pt2_threshold=1e-4, max_determinants=100000
+                method_type="cipsi", 
+                pt2_threshold=1e-4, 
+                max_determinants=100000,
+                skip_validation=True  # Skip software validation for testing
             )
 
             assert cipsi_method.method_type == "cipsi"
@@ -202,7 +212,11 @@ class TestSelectedCIMethod:
     def test_selected_ci_cost_estimation(self):
         """Test Selected CI computational cost estimation."""
         try:
-            sci_method = SelectedCIMethod(method_type="shci", max_determinants=100000)
+            sci_method = SelectedCIMethod(
+                method_type="shci", 
+                max_determinants=100000,
+                skip_validation=True  # Skip software validation for testing
+            )
 
             cost = sci_method.estimate_cost(n_electrons=6, n_orbitals=6, basis_size=50)
 
